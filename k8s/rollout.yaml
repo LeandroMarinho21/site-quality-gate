@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: site-quality-gate
+  namespace: site-quality-gate
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: site-quality-gate
+  template:
+    metadata:
+      labels:
+        app: site-quality-gate
+    spec:
+      containers:
+        - name: web
+          image: site-quality-gate:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_VERSION
+              value: "1.0.0"
+            - name: INJECT_ERRORS
+              value: "0"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+  strategy:
+    canary:
+      canaryService: site-quality-gate-canary
+      stableService: site-quality-gate-stable
+      trafficRouting:
+        nginx:
+          stableIngress: site-quality-gate
+      steps:
+        - setWeight: 10
+        - pause: {}
+        - setWeight: 50
+        - pause: {}
+        - setWeight: 100

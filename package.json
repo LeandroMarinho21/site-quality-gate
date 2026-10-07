@@ -1,0 +1,13 @@
+{
+  "name": "site-quality-gate",
+  "private": true,
+  "scripts": {
+    "test": "playwright test --grep-invert @demo",
+    "test:smoke": "playwright test tests/smoke --grep-invert @demo",
+    "test:regression": "playwright test tests/regression",
+    "test:demo": "playwright test --grep @demo"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0"
+  }
+}

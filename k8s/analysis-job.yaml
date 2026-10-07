@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: error-rate-check
+  namespace: site-quality-gate
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: check
+          image: curlimages/curl:8.11.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              BASE=http://site-quality-gate-canary.site-quality-gate.svc.cluster.local
+              i=0
+              while [ "$i" -lt 8 ]; do
+                curl -sf "$BASE/" >/dev/null
+                i=$((i + 1))
+              done
+              BODY=$(curl -sf "$BASE/metrics")
+              echo "$BODY"
+              REQ=$(echo "$BODY" | awk '/^http_requests_total / {print $2}')
+              ERR=$(echo "$BODY" | awk '/^http_errors_total / {print $2}')
+              RATE=$(echo "$BODY" | awk '/^http_error_rate / {print $2}')
+              echo "requests=$REQ errors=$ERR error_rate=$RATE threshold=0.05"
+              awk -v r="$RATE" 'BEGIN { exit (r+0 > 0.05) ? 1 : 0 }'

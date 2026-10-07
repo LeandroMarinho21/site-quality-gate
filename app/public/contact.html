@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contato · Nimbus Shop</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/">Nimbus Shop</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/catalog.html">Catálogo</a>
+        <a href="/contact.html" aria-current="page">Contato</a>
+        <a href="/status">Status</a>
+      </nav>
+    </header>
+    <main class="wrap">
+      <h1 data-testid="contact-title">Fale com o suporte</h1>
+      <form id="contact-form" data-testid="contact-form">
+        <label>Nome <input name="name" required data-testid="contact-name" /></label>
+        <label>Mensagem <textarea name="message" required data-testid="contact-message"></textarea></label>
+        <button type="submit">Enviar</button>
+      </form>
+      <p id="contact-result" class="flash" hidden data-testid="contact-result"></p>
+      <script>
+        document.getElementById("contact-form").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const res = await fetch("/contact", { method: "POST" });
+          const data = await res.json();
+          const out = document.getElementById("contact-result");
+          out.hidden = false;
+          out.textContent = data.message;
+        });
+      </script>
+    </main>
+  </body>
+</html>

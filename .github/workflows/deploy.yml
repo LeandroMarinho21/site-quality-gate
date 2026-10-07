@@ -1,0 +1,114 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_false_positive:
+        description: Run disposable false-positive smoke spec (expect red)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BASE_URL: http://127.0.0.1:8080
+      ERROR_RATE_THRESHOLD: "0.05"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install kubectl-argo-rollouts
+        run: |
+          curl -sSL -o kubectl-argo-rollouts https://github.com/argoproj/argo-rollouts/releases/download/v1.8.3/kubectl-argo-rollouts-linux-amd64
+          chmod +x kubectl-argo-rollouts
+          sudo mv kubectl-argo-rollouts /usr/local/bin/kubectl-argo-rollouts
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: site-quality-gate
+          config: kind-config.yaml
+          wait: 120s
+      - name: Install ingress and Argo Rollouts
+        run: bash scripts/kind-up.sh
+      - name: Build image
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          docker build -t "site-quality-gate:$TAG" .
+          docker tag "site-quality-gate:$TAG" site-quality-gate:bootstrap
+          docker tag "site-quality-gate:$TAG" "ghcr.io/${GITHUB_REPOSITORY,,}:$TAG"
+      - name: Push GHCR
+        continue-on-error: true
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "ghcr.io/${GITHUB_REPOSITORY,,}:$IMAGE_TAG"
+      - name: Load images into kind
+        run: |
+          kind load docker-image site-quality-gate:bootstrap --name site-quality-gate
+          kind load docker-image "site-quality-gate:$IMAGE_TAG" --name site-quality-gate
+      - name: Apply baseline
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/service-stable.yaml -f k8s/service-canary.yaml -f k8s/ingress.yaml -f k8s/analysis-error-rate.yaml
+          sed "s|image: site-quality-gate:local|image: site-quality-gate:bootstrap|" k8s/rollout.yaml | kubectl apply -f -
+          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Healthy
+      - name: Start canary revision
+        run: |
+          kubectl argo rollouts set image site-quality-gate web="site-quality-gate:${IMAGE_TAG}" -n site-quality-gate
+          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Paused
+      - name: Metrics
+        id: metrics
+        run: bash scripts/read-metrics.sh "$BASE_URL"
+      - name: Analysis job
+        id: analysis
+        run: |
+          kubectl -n site-quality-gate delete job error-rate-check --ignore-not-found
+          kubectl apply -f k8s/analysis-job.yaml
+          kubectl -n site-quality-gate wait --for=condition=complete job/error-rate-check --timeout=90s
+          kubectl -n site-quality-gate logs job/error-rate-check
+      - name: Install Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Smoke
+        id: smoke
+        run: |
+          if [ "${{ github.event.inputs.run_false_positive }}" = "true" ]; then
+            npx playwright test tests/smoke
+          else
+            npx playwright test tests/smoke --grep-invert @demo
+          fi
+      - name: Promote or abort
+        if: always() && steps.smoke.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          NS=site-quality-gate
+          NAME=site-quality-gate
+          if [ "${{ steps.metrics.outcome }}" != "success" ] || [ "${{ steps.analysis.outcome }}" != "success" ] || [ "${{ steps.smoke.outcome }}" != "success" ]; then
+            kubectl argo rollouts abort "$NAME" -n "$NS" || true
+            kubectl argo rollouts get rollout "$NAME" -n "$NS" || true
+            exit 1
+          fi
+          kubectl argo rollouts promote "$NAME" -n "$NS"
+          bash scripts/wait-rollout-paused.sh "$NS" "$NAME" Paused
+          bash scripts/read-metrics.sh "$BASE_URL"
+          npx playwright test tests/smoke --grep-invert @demo
+          kubectl argo rollouts promote "$NAME" -n "$NS"
+          bash scripts/wait-rollout-paused.sh "$NS" "$NAME" Healthy
+          kubectl argo rollouts get rollout "$NAME" -n "$NS"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-canary
+          path: playwright-report
+          retention-days: 7
