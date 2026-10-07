@@ -1,20 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-test("formulario de contato confirma envio", async ({ page }) => {
+test("contato do Joao sobre a Granite Mid", async ({ page }) => {
   await page.goto("/contact.html");
-  await page.getByTestId("contact-name").fill("Leandro");
-  await page.getByTestId("contact-message").fill("Pedido de teste");
+  await page.getByTestId("contact-name").fill("João Ribeiro");
+  await page.getByTestId("contact-message").fill("A Granite Mid serve no 42?");
   await page.getByTestId("contact-form").getByRole("button", { name: "Enviar" }).click();
-  await expect(page.getByTestId("contact-result")).toHaveText("Recebemos seu pedido.");
+  await expect(page.getByTestId("contact-result")).toHaveText("Recebemos a mensagem de João Ribeiro.");
 });
 
-test("home mostra produtos em destaque", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByTestId("featured")).toContainText("Mochila Trail 32L");
-  await expect(page.getByTestId("featured")).toContainText("Lanterna Apex");
+test("api de contato exige nome e mensagem", async ({ request }) => {
+  const res = await request.post("/api/contact", { data: { name: "" } });
+  expect(res.status()).toBe(400);
 });
 
-test("metrics expõe contadores prometheus", async ({ request }) => {
+test("metrics expoe contadores prometheus", async ({ request }) => {
   const res = await request.get("/metrics");
   expect(res.status()).toBe(200);
   const text = await res.text();

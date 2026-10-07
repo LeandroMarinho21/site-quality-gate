@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Contato · Nimbus Shop</title>
+    <title>Sobre · Nimbus Shop</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -19,20 +19,18 @@
       <nav class="nav">
         <a href="/" data-testid="nav-home">Home</a>
         <a href="/catalog.html" data-testid="nav-catalog">Catálogo</a>
-        <a href="/about.html" data-testid="nav-about">Sobre</a>
-        <a href="/contact.html" data-testid="nav-contact" aria-current="page">Contato</a>
+        <a href="/about.html" data-testid="nav-about" aria-current="page">Sobre</a>
+        <a href="/contact.html" data-testid="nav-contact">Contato</a>
         <a href="/status" data-testid="nav-status">Status</a>
       </nav>
     </header>
     <main class="wrap">
-      <h1 data-testid="contact-title">Fale com o suporte</h1>
-      <p class="lede">Troca de numeração da Bota Granite, prazo da Capa Storm, retirada em São Paulo.</p>
-      <form class="stack" data-testid="contact-form">
-        <label>Nome <input name="name" required data-testid="contact-name" placeholder="João Ribeiro" /></label>
-        <label>Mensagem <textarea name="message" required data-testid="contact-message" placeholder="A Granite Mid serve no 42?"></textarea></label>
-        <button type="submit">Enviar</button>
-      </form>
-      <p class="flash" hidden data-testid="contact-result"></p>
+      <h1 data-testid="about-title">Sobre a Nimbus</h1>
+      <p data-testid="about-copy">
+        Loja fictícia de equipamento de trilha usada para validar deploy canary.
+        Os produtos (Trail 32L, Apex 800, Storm, Granite Mid) existem só neste ambiente de teste:
+        catálogo, sacola, checkout e métricas no mesmo processo.
+      </p>
     </main>
     <footer class="site-footer">
       <p>Nimbus Shop · loja de demonstração para quality gate · Release 1.0</p>

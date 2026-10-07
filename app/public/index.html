@@ -3,34 +3,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nimbus Shop</title>
+    <title>Nimbus Shop · equipamento de trilha</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="top">
-      <a class="brand" href="/" data-testid="brand">Nimbus Shop</a>
-      <nav>
-        <a href="/" aria-current="page">Home</a>
+    <header class="site-header">
+      <div class="bar">
+        <a class="brand" href="/" data-testid="brand">Nimbus Shop</a>
+        <form class="search" action="/catalog.html" data-testid="search-form">
+          <input name="q" type="search" placeholder="Buscar: lanterna, bota, mochila" data-testid="search-input" />
+          <button type="submit">Buscar</button>
+        </form>
+        <a class="bag" href="/cart.html" data-testid="nav-cart">Sacola <span class="count" data-testid="cart-count">0</span></a>
+      </div>
+      <nav class="nav">
+        <a href="/" data-testid="nav-home" aria-current="page">Home</a>
         <a href="/catalog.html" data-testid="nav-catalog">Catálogo</a>
+        <a href="/about.html" data-testid="nav-about">Sobre</a>
         <a href="/contact.html" data-testid="nav-contact">Contato</a>
         <a href="/status" data-testid="nav-status">Status</a>
       </nav>
     </header>
+    <section class="hero">
+      <div class="hero-inner">
+        <h1 data-testid="home-title">Coleção Serra do Mar · Release 1.0</h1>
+        <p>Mochila, capa e bota pensadas para chuva fina na trilha da Pedra do Sino. Loja de demonstração com checkout, sacola e catálogo reais o bastante para smoke e regressão.</p>
+        <a class="btn" href="/catalog.html" data-testid="hero-catalog">Ver catálogo</a>
+      </div>
+    </section>
     <main class="wrap">
-      <h1 data-testid="home-title">Equipamento de campo, Release 1.0</h1>
-      <p class="lede">Loja de teste para validar canary, smoke e regressão antes de promover o tráfego.</p>
+      <h2>Destaques da semana</h2>
       <section class="grid" data-testid="featured">
         <article class="card">
-          <h2>Mochila Trail 32L</h2>
-          <p class="price">R$ 289</p>
-          <a class="btn" href="/catalog.html">Ver catálogo</a>
+          <span class="tag">Mais vendida</span>
+          <h3>Mochila Trail 32L</h3>
+          <p>Painel ventilado para travessia de um dia. R$ 289.</p>
+          <a class="btn" href="/product.html?sku=trail-32">Ver Trail 32L</a>
         </article>
         <article class="card">
-          <h2>Lanterna Apex</h2>
-          <p class="price">R$ 119</p>
-          <a class="btn" href="/catalog.html">Ver catálogo</a>
+          <span class="tag">Novidade</span>
+          <h3>Lanterna Apex 800</h3>
+          <p>800 lumens, USB-C, cabe no bolso. R$ 119.</p>
+          <a class="btn" href="/product.html?sku=apex-light">Ver Apex 800</a>
+        </article>
+        <article class="card">
+          <span class="tag">Trilha</span>
+          <h3>Bota Granite Mid</h3>
+          <p>Cano médio e sola para pedra molhada. R$ 459.</p>
+          <a class="btn" href="/product.html?sku=granite-boot">Ver Granite</a>
         </article>
       </section>
     </main>
+    <footer class="site-footer">
+      <p>Nimbus Shop · loja de demonstração para quality gate · Release 1.0</p>
+    </footer>
+    <script src="/app.js" defer></script>
   </body>
 </html>
