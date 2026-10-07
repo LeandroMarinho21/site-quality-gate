@@ -68,6 +68,8 @@ jobs:
           bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Paused
       - name: Metrics
         id: metrics
+        env:
+          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
         run: bash scripts/read-metrics.sh "$BASE_URL"
       - name: Analysis job
         id: analysis
@@ -89,12 +91,17 @@ jobs:
             npx playwright test tests/smoke --grep-invert @demo
           fi
       - name: Promote or abort
+        id: gate
         if: always() && steps.smoke.outcome != 'skipped'
+        env:
+          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
         run: |
           set -euo pipefail
           NS=site-quality-gate
           NAME=site-quality-gate
           if [ "${{ steps.metrics.outcome }}" != "success" ] || [ "${{ steps.analysis.outcome }}" != "success" ] || [ "${{ steps.smoke.outcome }}" != "success" ]; then
+            echo "GATE_VERDICT=ABORTED" >> "$GITHUB_ENV"
+            echo "verdict=ABORTED" >> "$GITHUB_OUTPUT"
             kubectl argo rollouts abort "$NAME" -n "$NS" || true
             kubectl argo rollouts get rollout "$NAME" -n "$NS" || true
             exit 1
@@ -106,8 +113,22 @@ jobs:
           kubectl argo rollouts promote "$NAME" -n "$NS"
           bash scripts/wait-rollout-paused.sh "$NS" "$NAME" Healthy
           kubectl argo rollouts get rollout "$NAME" -n "$NS"
+          echo "GATE_VERDICT=PROMOTED" >> "$GITHUB_ENV"
+          echo "verdict=PROMOTED" >> "$GITHUB_OUTPUT"
+      - name: Gate summary
+        if: always()
+        env:
+          SUMMARY_KIND: deploy
+          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
+          PLAYWRIGHT_JSON: playwright-results.json
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          ANALYSIS_OUTCOME: ${{ steps.analysis.outcome }}
+          METRICS_OUTCOME: ${{ steps.metrics.outcome }}
+          GATE_VERDICT: ${{ steps.gate.outputs.verdict }}
+          RUN_FALSE_POSITIVE: ${{ github.event.inputs.run_false_positive }}
+        run: node scripts/write-summary.js
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always() && hashFiles('playwright-report/**') != ''
         with:
           name: playwright-report-canary
           path: playwright-report
