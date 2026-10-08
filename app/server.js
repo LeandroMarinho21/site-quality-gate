@@ -7,7 +7,7 @@ const PORT = Number(process.env.PORT || 8080);
 const VERSION = process.env.APP_VERSION || "1.0.0";
 const INJECT_ERRORS = process.env.INJECT_ERRORS === "1";
 const PUBLIC_DIR = path.join(__dirname, "public");
-const PRODUCTS = JSON.parse(fs.readFileSync(path.join(__dirname, "products.json"), "utf8"));
+const PRODUCTS = JSON.parse(fs.readFileSync(path.join(__dirname, "suites.json"), "utf8"));
 
 const stats = { requests: 0, errors: 0 };
 const orders = [];
@@ -70,18 +70,18 @@ function chrome(active) {
     `<a href="${href}" data-testid="${id}"${active === key ? ' aria-current="page"' : ""}>${label}</a>`;
   return `<header class="site-header">
       <div class="bar">
-        <a class="brand" href="/" data-testid="brand">Nimbus Shop</a>
+        <a class="brand" href="/" data-testid="brand">Nimbus <span>Gate</span></a>
         <form class="search" action="/catalog.html" data-testid="search-form">
-          <input name="q" type="search" placeholder="Buscar: lanterna, bota, mochila" data-testid="search-input" />
+          <input name="q" type="search" placeholder="Buscar suite: smoke, canary, error_rate" data-testid="search-input" />
           <button type="submit">Buscar</button>
         </form>
-        <a class="bag" href="/cart.html" data-testid="nav-cart">Sacola <span class="count" data-testid="cart-count">0</span></a>
+        <a class="bag" href="/cart.html" data-testid="nav-cart">Fila <span class="count" data-testid="cart-count">0</span></a>
       </div>
       <nav class="nav">
-        ${item("/", "nav-home", "Home", "home")}
-        ${item("/catalog.html", "nav-catalog", "Catálogo", "catalog")}
+        ${item("/", "nav-home", "Console", "home")}
+        ${item("/catalog.html", "nav-catalog", "Suites", "catalog")}
         ${item("/about.html", "nav-about", "Sobre", "about")}
-        ${item("/contact.html", "nav-contact", "Contato", "contact")}
+        ${item("/contact.html", "nav-contact", "Flake", "contact")}
         ${item("/status", "nav-status", "Status", "status")}
       </nav>
     </header>`;
@@ -119,7 +119,7 @@ function pageShell(title, active, inner) {
     ${chrome(active)}
     ${inner}
     <footer class="site-footer">
-      <p>Nimbus Shop · loja de demonstração para quality gate · Release 1.0</p>
+      <p>Nimbus Gate · console de quality gate · Release 1.0</p>
     </footer>
     <script src="/app.js" defer></script>
   </body>
@@ -129,11 +129,11 @@ function pageShell(title, active, inner) {
 function statusPage() {
   const rate = errorRate();
   return pageShell(
-    "Status · Nimbus Shop",
+    "Status · Nimbus Gate",
     "status",
     `<main class="wrap">
-      <h1>Saúde do replica</h1>
-      <p class="lede">O canary lê o mesmo <code>/metrics</code> antes de promover o tráfego.</p>
+      <h1>Replica canary</h1>
+      <p class="lede">O gate lê o mesmo <code>/metrics</code> no pause do rollout, antes do promote.</p>
       <dl class="metrics" data-testid="metrics-panel">
         <div><dt>Versão</dt><dd data-testid="metric-version">${VERSION}</dd></div>
         <div><dt>Requests</dt><dd data-testid="metric-requests">${stats.requests}</dd></div>
@@ -147,7 +147,7 @@ function statusPage() {
 
 function notFoundPage() {
   return pageShell(
-    "Não encontrado · Nimbus Shop",
+    "Não encontrado · Nimbus Gate",
     "",
     `<main class="wrap">
       <h1 data-testid="not-found-title">Página não encontrada</h1>
@@ -184,7 +184,7 @@ async function handleApi(req, res, route) {
       return true;
     }
     track(200);
-    sendJson(res, 200, { ok: true, message: `Recebemos a mensagem de ${body.name}.` });
+    sendJson(res, 200, { ok: true, message: `Flake registrado por ${body.name}.` });
     return true;
   }
 
@@ -296,5 +296,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  process.stdout.write(`nimbus-shop ${VERSION} listening on ${PORT}\n`);
+  process.stdout.write(`nimbus-gate ${VERSION} listening on ${PORT}\n`);
 });

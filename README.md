@@ -1,8 +1,8 @@
 # site-quality-gate
 
-Loja de demonstração **Nimbus Shop** (equipamento de trilha: Trail 32L, Apex 800, Granite Mid) usada para exercitar um quality gate: regressão no PR, canary com peso de tráfego no deploy, smoke e métricas antes de promover.
+Console **Nimbus Gate**: a própria UI parece uma ferramenta de testes (suites, fila, dispatch, status do canary). Serve de alvo para o quality gate — regressão no PR, canary com peso de tráfego, smoke e métricas antes de promover.
 
-Fluxos cobertos nos testes: busca (“lanterna”), filtro de calçados, sacola, checkout da Mariana Alves (CEP 01310-100) e contato do João Ribeiro sobre numeração da bota.
+Fluxos nos testes: busca `error_rate`, filtro canary, fila smoke-home + smoke-health (65s), run da Mariana Alves no ambiente `canary`, flake reportado pelo João Ribeiro.
 
 O cluster **não fica no ar 24/7**. Cada push em `main` sobe um [kind](https://kind.sigs.k8s.io/) no GitHub Actions, aplica um [Argo Rollouts](https://argo-rollouts.readthedocs.io/) canary (10% → pause → 50% → pause → 100%), lê `/metrics` e só então promove. Tudo no plano gratuito do GitHub, repo público, sem conta de cloud.
 

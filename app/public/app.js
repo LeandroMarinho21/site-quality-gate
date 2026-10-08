@@ -1,7 +1,7 @@
-const CART_KEY = "nimbus-cart";
+const CART_KEY = "nimbus-queue";
 
 function money(n) {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return `${n}s`;
 }
 
 function readCart() {
@@ -43,8 +43,8 @@ function productCard(p) {
     <span class="tag">${p.tag}</span>
     <h3>${p.name}</h3>
     <p>${p.blurb}</p>
-    <p class="price">${money(p.price)}</p>
-    <a class="btn" href="/product.html?sku=${p.sku}">Ver produto</a>
+    <p class="price">${money(p.price)} est.</p>
+    <a class="btn" href="/product.html?sku=${p.sku}">Abrir suite</a>
   </li>`;
 }
 
@@ -57,7 +57,9 @@ async function renderCatalog() {
   const products = await fetchProducts();
   const filtered = products.filter((p) => {
     const byCat = category === "todos" || p.category === category;
-    const byQ = !q || `${p.name} ${p.blurb} ${p.sku}`.toLowerCase().includes(q);
+    const byQ =
+      !q ||
+      `${p.name} ${p.blurb} ${p.sku} ${(p.specs || []).join(" ")}`.toLowerCase().includes(q);
     return byCat && byQ;
   });
   const empty = document.querySelector("[data-testid=catalog-empty]");
@@ -78,21 +80,21 @@ async function renderProduct() {
   const sku = new URLSearchParams(location.search).get("sku");
   const res = await fetch(`/api/products/${encodeURIComponent(sku || "")}`);
   if (!res.ok) {
-    root.innerHTML = "<p data-testid=product-missing>Produto não encontrado.</p>";
+    root.innerHTML = "<p data-testid=product-missing>Suite nao encontrada.</p>";
     return;
   }
   const p = await res.json();
   root.innerHTML = `
     <div class="swatch" data-sku="${p.sku}" aria-hidden="true"></div>
     <div>
-      <p class="tag">${p.tag}</p>
+      <p class="tag">${p.tag} · ${p.category}</p>
       <h1 data-testid="product-name">${p.name}</h1>
-      <p class="price" data-testid="product-price">${money(p.price)}</p>
+      <p class="price" data-testid="product-price">${money(p.price)} estimados</p>
       <p data-testid="product-blurb">${p.blurb}</p>
       <ul class="specs">${p.specs.map((s) => `<li>${s}</li>`).join("")}</ul>
-      <p>Estoque: <span data-testid="product-stock">${p.stock}</span></p>
-      <button class="btn" type="button" data-testid="add-to-cart">Adicionar à sacola</button>
-      <p class="flash" hidden data-testid="added-flash">Adicionado à sacola.</p>
+      <p>Runs recentes: <span data-testid="product-stock">${p.stock}</span></p>
+      <button class="btn" type="button" data-testid="add-to-cart">Enfileirar suite</button>
+      <p class="flash" hidden data-testid="added-flash">Na fila de execucao.</p>
     </div>`;
   root.querySelector("[data-testid=add-to-cart]").addEventListener("click", () => {
     addToCart(p.sku, 1);
@@ -136,8 +138,8 @@ async function renderCart() {
   body.querySelectorAll("input[type=number]").forEach((input) => {
     input.addEventListener("change", () => {
       const sku = input.closest("tr").dataset.sku;
-      const next = readCart().map((item) =>
-        item.sku === sku ? { ...item, qty: Math.max(1, Number(input.value) || 1) } : item,
+      const next = readCart().map((row) =>
+        row.sku === sku ? { ...row, qty: Math.max(1, Number(input.value) || 1) } : row,
       );
       writeCart(next);
       renderCart();
@@ -146,7 +148,7 @@ async function renderCart() {
   body.querySelectorAll("button[data-testid^=remove-]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const sku = btn.closest("tr").dataset.sku;
-      writeCart(readCart().filter((item) => item.sku !== sku));
+      writeCart(readCart().filter((row) => row.sku !== sku));
       renderCart();
     });
   });
@@ -161,14 +163,13 @@ async function bindCheckout() {
     const err = document.querySelector("[data-testid=checkout-error]");
     result.hidden = true;
     err.hidden = true;
-    const items = readCart();
     const payload = {
       customer: {
         name: form.name.value.trim(),
         email: form.email.value.trim(),
         cep: form.cep.value.trim(),
       },
-      items,
+      items: readCart(),
     };
     const res = await fetch("/api/orders", {
       method: "POST",
@@ -180,13 +181,13 @@ async function bindCheckout() {
       err.hidden = false;
       err.textContent =
         data.error === "empty_cart"
-          ? "A sacola está vazia."
-          : "Não foi possível fechar o pedido. Confira nome, e-mail e CEP.";
+          ? "A fila de execucao esta vazia."
+          : "Nao foi possivel disparar o run. Confira dono, e-mail e ambiente.";
       return;
     }
     writeCart([]);
     result.hidden = false;
-    result.textContent = `Pedido ${data.order.id} confirmado para ${data.order.customer.name}. Total ${money(data.order.total)}.`;
+    result.textContent = `Run ${data.order.id} disparado por ${data.order.customer.name}. Duracao ${money(data.order.total)}.`;
   });
 }
 
