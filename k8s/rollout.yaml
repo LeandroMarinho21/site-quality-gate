@@ -4,7 +4,7 @@ metadata:
   name: site-quality-gate
   namespace: site-quality-gate
 spec:
-  replicas: 2
+  replicas: 3
   revisionHistoryLimit: 2
   selector:
     matchLabels:
@@ -24,7 +24,7 @@ spec:
             - name: APP_VERSION
               value: "1.0.0"
             - name: INJECT_ERRORS
-              value: "0"
+              value: "INJECT_ERRORS_VALUE"
           readinessProbe:
             httpGet:
               path: /health
@@ -45,9 +45,19 @@ spec:
       trafficRouting:
         nginx:
           stableIngress: site-quality-gate
+          additionalIngressAnnotations:
+            canary-by-header: X-Canary
+            canary-by-header-value: always
       steps:
         - setWeight: 10
-        - pause: {}
+        - analysis:
+            templates:
+              - templateName: error-rate
+        - pause:
+            duration: 10m
         - setWeight: 50
-        - pause: {}
-        - setWeight: 100
+        - analysis:
+            templates:
+              - templateName: error-rate
+        - pause:
+            duration: 10m

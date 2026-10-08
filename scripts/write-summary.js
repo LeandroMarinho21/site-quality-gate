@@ -124,6 +124,10 @@ if (kind === "ci") {
     lines.push(`> Demo de falso positivo: spec \`@demo\` ativo. Metricas do app podem estar saudaveis mesmo com o job vermelho.`);
     lines.push("");
   }
+  if (process.env.INJECT_ERRORS === "true") {
+    lines.push(`> Canary com INJECT_ERRORS: /checkout 5xx, error_rate acima do threshold, abort por metrica.`);
+    lines.push("");
+  }
   lines.push(`<table><tr>`);
   lines.push(tile("versao", metrics.version || imageTag, "APP_VERSION"));
   lines.push(tile("requests", String(metrics.requests ?? "-"), "probe"));

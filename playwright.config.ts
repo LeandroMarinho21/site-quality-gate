@@ -21,6 +21,9 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    extraHTTPHeaders: process.env.CANARY_HEADER
+      ? { "X-Canary": process.env.CANARY_HEADER }
+      : undefined,
   },
   projects: [
     {

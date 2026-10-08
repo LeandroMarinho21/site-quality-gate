@@ -24,8 +24,9 @@ spec:
                         set -eu
                         BASE=http://site-quality-gate-canary.site-quality-gate.svc.cluster.local
                         i=0
-                        while [ "$i" -lt 8 ]; do
-                          curl -sf "$BASE/" >/dev/null
+                        while [ "$i" -lt 6 ]; do
+                          curl -s "$BASE/" >/dev/null || true
+                          curl -s "$BASE/checkout" >/dev/null || true
                           i=$((i + 1))
                         done
                         BODY=$(curl -sf "$BASE/metrics")

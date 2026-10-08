@@ -11,10 +11,13 @@ O cluster **não fica no ar 24/7**. Cada push em `main` sobe um [kind](https://k
 ```
 PR  → Docker Compose + Playwright (smoke e regressão)
 main → kind + Ingress NGINX + Argo Rollouts
-     → canary 10% → pause
-     → error_rate + smoke
+     → canary 10% → analysis error_rate (service canary)
+     → pause
+     → smoke com header X-Canary: always
      → promote ou abort
 ```
+
+O smoke do deploy manda `X-Canary: always` no Ingress, então as requests batem no replica novo — não na mistura 10/90. O AnalysisTemplate do Argo consulta o Service canary direto. Pause de 10 min é teto; o Actions promove antes disso.
 
 Métricas vêm do próprio app (`GET /metrics` e `/status`). O job do Actions imprime `requests`, `errors`, `error_rate` e o threshold (5%). Sem Prometheus nem Grafana.
 
@@ -43,6 +46,10 @@ Para gravar um job vermelho depois do verde:
 2. Actions → **deploy** → Run workflow → marque `run_false_positive`.
 3. O smoke falha, o rollout dá abort, as métricas continuam abaixo do threshold.
 4. Apague o spec, o input no workflow e este parágrafo.
+
+## Vermelho real (métrica)
+
+Actions → **deploy** → Run workflow → marque `inject_errors`. O canary sobe com `INJECT_ERRORS=1`, `/checkout` devolve 500, o analysis aborta o rollout e o job fica vermelho com error_rate acima de 5%.
 
 ## Layout
 

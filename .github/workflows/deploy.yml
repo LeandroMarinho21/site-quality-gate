@@ -9,6 +9,10 @@ on:
         description: Run disposable false-positive smoke spec (expect red)
         type: boolean
         default: false
+      inject_errors:
+        description: Canary with INJECT_ERRORS (expect metric abort)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +25,7 @@ jobs:
     env:
       BASE_URL: http://127.0.0.1:8080
       ERROR_RATE_THRESHOLD: "0.05"
+      CANARY_HEADER: always
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,24 +65,28 @@ jobs:
         run: |
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/service-stable.yaml -f k8s/service-canary.yaml -f k8s/ingress.yaml -f k8s/analysis-error-rate.yaml
-          sed "s|image: site-quality-gate:local|image: site-quality-gate:bootstrap|" k8s/rollout.yaml | kubectl apply -f -
+          sed -e "s|image: site-quality-gate:local|image: site-quality-gate:bootstrap|" \
+              -e "s|INJECT_ERRORS_VALUE|0|" k8s/rollout.yaml | kubectl apply -f -
           bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Healthy
       - name: Start canary revision
         run: |
-          kubectl argo rollouts set image site-quality-gate web="site-quality-gate:${IMAGE_TAG}" -n site-quality-gate
-          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Paused
+          INJECT=0
+          if [ "${{ github.event.inputs.inject_errors }}" = "true" ]; then INJECT=1; fi
+          sed -e "s|image: site-quality-gate:local|image: site-quality-gate:${IMAGE_TAG}|" \
+              -e "s|INJECT_ERRORS_VALUE|${INJECT}|" k8s/rollout.yaml | kubectl apply -f -
+          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Paused,Degraded
       - name: Metrics
         id: metrics
         env:
           GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
         run: bash scripts/read-metrics.sh "$BASE_URL"
-      - name: Analysis job
+      - name: Analysis
         id: analysis
         run: |
-          kubectl -n site-quality-gate delete job error-rate-check --ignore-not-found
-          kubectl apply -f k8s/analysis-job.yaml
-          kubectl -n site-quality-gate wait --for=condition=complete job/error-rate-check --timeout=90s
-          kubectl -n site-quality-gate logs job/error-rate-check
+          PHASE=$(kubectl get rollout site-quality-gate -n site-quality-gate -o jsonpath='{.status.phase}')
+          echo "rollout phase=$PHASE"
+          kubectl argo rollouts get rollout site-quality-gate -n site-quality-gate || true
+          if [ "$PHASE" = "Degraded" ]; then exit 1; fi
       - name: Install Playwright
         run: |
           npm ci
@@ -126,6 +135,7 @@ jobs:
           METRICS_OUTCOME: ${{ steps.metrics.outcome }}
           GATE_VERDICT: ${{ steps.gate.outputs.verdict }}
           RUN_FALSE_POSITIVE: ${{ github.event.inputs.run_false_positive }}
+          INJECT_ERRORS: ${{ github.event.inputs.inject_errors }}
         run: node scripts/write-summary.js
       - uses: actions/upload-artifact@v4
         if: always() && hashFiles('playwright-report/**') != ''
