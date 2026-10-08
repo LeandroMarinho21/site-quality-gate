@@ -38,9 +38,25 @@ async function fetchProducts() {
   return data.products || [];
 }
 
+const ICONS = {
+  "trail-32":
+    '<svg viewBox="0 0 80 90" aria-hidden="true"><path fill="#f3eee6" d="M24 28c0-10 7-18 16-18s16 8 16 18v6H24v-6z"/><path fill="#d7cbb8" d="M18 34h44l4 42H14z"/><path fill="#1f4a3e" d="M22 38h36v8H22z"/><path fill="none" stroke="#1a1714" stroke-width="3" d="M32 34v-8a8 8 0 0 1 16 0v8"/></svg>',
+  "apex-light":
+    '<svg viewBox="0 0 80 90" aria-hidden="true"><rect x="28" y="38" width="24" height="36" rx="6" fill="#f3eee6"/><path fill="#c4a35a" d="M22 22h36l-6 16H28z"/><circle cx="40" cy="22" r="10" fill="#f7e7b0"/><rect x="36" y="74" width="8" height="8" fill="#1a1714"/></svg>',
+  "rain-shell":
+    '<svg viewBox="0 0 80 90" aria-hidden="true"><path fill="#d7e3ec" d="M20 34c0-14 9-24 20-24s20 10 20 24v40H20V34z"/><path fill="#3d5a73" d="M20 48h40v28H20z"/><path fill="#1a1714" d="M36 18h8v8h-8z"/></svg>',
+  "granite-boot":
+    '<svg viewBox="0 0 90 80" aria-hidden="true"><path fill="#c4a07a" d="M18 28h28v28H18z"/><path fill="#6b4a32" d="M18 50h52c8 0 12 8 12 12H14c0-6 2-12 4-12z"/><path fill="#1a1714" d="M16 62h68v8H16z"/></svg>',
+  "termo-1l":
+    '<svg viewBox="0 0 80 90" aria-hidden="true"><rect x="30" y="10" width="20" height="10" rx="3" fill="#f3eee6"/><rect x="26" y="20" width="28" height="62" rx="10" fill="#cfd3cc"/><rect x="30" y="28" width="20" height="42" rx="8" fill="#8a8f86"/></svg>',
+  "trek-pole":
+    '<svg viewBox="0 0 80 90" aria-hidden="true"><rect x="36" y="8" width="8" height="70" rx="3" fill="#d7cbb8"/><rect x="34" y="22" width="12" height="8" fill="#5a6b48"/><polygon points="36,78 44,78 40,88" fill="#1a1714"/></svg>',
+};
+
 function swatch(p) {
   const tone = p.tone || "#2f5d50";
-  return `<div class="swatch" data-sku="${p.sku}" style="background: linear-gradient(160deg, ${tone}, #1a1714 88%);"></div>`;
+  const icon = ICONS[p.sku] || ICONS["trail-32"];
+  return `<div class="swatch" data-sku="${p.sku}" style="background: linear-gradient(165deg, ${tone} 0%, #241c16 100%);">${icon}</div>`;
 }
 
 function productCard(p) {
