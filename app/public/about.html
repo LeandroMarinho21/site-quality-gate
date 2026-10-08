@@ -3,37 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sobre · Nimbus Gate</title>
+    <title>Sobre · Nimbus Shop</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <div class="bar">
-        <a class="brand" href="/" data-testid="brand">Nimbus <span>Gate</span></a>
+        <a class="brand" href="/" data-testid="brand">Nimbus Shop</a>
         <form class="search" action="/catalog.html" data-testid="search-form">
-          <input name="q" type="search" placeholder="Buscar suite: smoke, canary, error_rate" data-testid="search-input" />
+          <input name="q" type="search" placeholder="Buscar lanterna, bota, mochila…" data-testid="search-input" />
           <button type="submit">Buscar</button>
         </form>
-        <a class="bag" href="/cart.html" data-testid="nav-cart">Fila <span class="count" data-testid="cart-count">0</span></a>
+        <a class="bag" href="/cart.html" data-testid="nav-cart">Sacola <span class="count" data-testid="cart-count">0</span></a>
       </div>
       <nav class="nav">
-        <a href="/" data-testid="nav-home">Console</a>
-        <a href="/catalog.html" data-testid="nav-catalog">Suites</a>
+        <a href="/" data-testid="nav-home">Home</a>
+        <a href="/catalog.html" data-testid="nav-catalog">Catálogo</a>
         <a href="/about.html" data-testid="nav-about" aria-current="page">Sobre</a>
-        <a href="/contact.html" data-testid="nav-contact">Flake</a>
+        <a href="/contact.html" data-testid="nav-contact">Contato</a>
         <a href="/status" data-testid="nav-status">Status</a>
       </nav>
     </header>
     <main class="wrap">
-      <h1 data-testid="about-title">Sobre o gate</h1>
+      <p class="eyebrow">A marca</p>
+      <h1 data-testid="about-title">Sobre a Nimbus</h1>
       <p data-testid="about-copy">
-        Console de demonstração do mesmo pipeline do repositório: Playwright no PR,
-        canary 10/50/100 no kind, smoke e error_rate antes do promote.
-        As suites (smoke-home, canary-metrics, analysis-job) existem para exercitar fila, dispatch e busca.
+        Loja fictícia de equipamento de trilha. Os produtos (Trail 32L, Apex 800, Storm, Granite Mid)
+        existem para exercitar catálogo, sacola, checkout e o quality gate do repositório.
       </p>
     </main>
     <footer class="site-footer">
-      <p>Nimbus Gate · console de quality gate · Release 1.0</p>
+      <p>Nimbus Shop · Serra do Mar · Release 1.0</p>
     </footer>
     <script src="/app.js" defer></script>
   </body>

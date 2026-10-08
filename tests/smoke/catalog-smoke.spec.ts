@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("suites listam smoke-home e canary-metrics", async ({ page }) => {
+test("catalogo lista a Trail 32L e a Apex 800", async ({ page }) => {
   await page.goto("/catalog.html");
-  await expect(page.getByTestId("product-smoke-home")).toBeVisible();
-  await expect(page.getByTestId("product-canary-metrics")).toBeVisible();
+  await expect(page.getByTestId("product-trail-32")).toBeVisible();
+  await expect(page.getByTestId("product-apex-light")).toBeVisible();
 });

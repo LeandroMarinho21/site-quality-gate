@@ -3,72 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nimbus Gate · quality console</title>
+    <title>Nimbus Shop · equipamento de trilha</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <div class="bar">
-        <a class="brand" href="/" data-testid="brand">Nimbus <span>Gate</span></a>
+        <a class="brand" href="/" data-testid="brand">Nimbus Shop</a>
         <form class="search" action="/catalog.html" data-testid="search-form">
-          <input name="q" type="search" placeholder="Buscar suite: smoke, canary, error_rate" data-testid="search-input" />
+          <input name="q" type="search" placeholder="Buscar lanterna, bota, mochila…" data-testid="search-input" />
           <button type="submit">Buscar</button>
         </form>
-        <a class="bag" href="/cart.html" data-testid="nav-cart">Fila <span class="count" data-testid="cart-count">0</span></a>
+        <a class="bag" href="/cart.html" data-testid="nav-cart">Sacola <span class="count" data-testid="cart-count">0</span></a>
       </div>
       <nav class="nav">
-        <a href="/" data-testid="nav-home" aria-current="page">Console</a>
-        <a href="/catalog.html" data-testid="nav-catalog">Suites</a>
+        <a href="/" data-testid="nav-home" aria-current="page">Home</a>
+        <a href="/catalog.html" data-testid="nav-catalog">Catálogo</a>
         <a href="/about.html" data-testid="nav-about">Sobre</a>
-        <a href="/contact.html" data-testid="nav-contact">Flake</a>
+        <a href="/contact.html" data-testid="nav-contact">Contato</a>
         <a href="/status" data-testid="nav-status">Status</a>
       </nav>
     </header>
     <section class="hero">
       <div class="hero-inner">
-        <p class="kicker">kind · argo rollouts · playwright</p>
-        <h1 data-testid="home-title">Quality gate console · Release 1.0</h1>
-        <p>Smoke no canary, regressão no PR, error_rate antes do promote. Enfileire suites e dispare um run como no Actions.</p>
-        <div class="pills" data-testid="gate-pills">
-          <span class="pill pass">ci PASS</span>
-          <span class="pill pass">metrics 0.00%</span>
-          <span class="pill fail">@demo FAIL</span>
-        </div>
-        <p><a class="btn" href="/catalog.html" data-testid="hero-catalog">Abrir suites</a></p>
+        <p class="eyebrow">Serra do Mar · inverno</p>
+        <h1 data-testid="home-title">Coleção Serra do Mar · Release 1.0</h1>
+        <p>Mochila, capa e bota para chuva fina na Pedra do Sino. Peças de demonstração com checkout de verdade o bastante para o quality gate.</p>
+        <a class="btn" href="/catalog.html" data-testid="hero-catalog">Ver catálogo</a>
       </div>
     </section>
+    <div class="strip">
+      <p>Frete em 3 dias úteis para SP e RJ</p>
+      <p>Troca de numeração em 30 dias</p>
+      <p>Atendimento: João no WhatsApp da loja</p>
+    </div>
     <main class="wrap">
-      <h2>Runs de exemplo</h2>
-      <div class="panel" data-testid="featured">
-        <table class="runs">
-          <thead>
-            <tr><th>run</th><th>suite</th><th>env</th><th>resultado</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="run-id">NB-0008</td>
-              <td>Smoke · home e health</td>
-              <td>canary 10%</td>
-              <td><span class="badge pass">PASS</span></td>
-            </tr>
-            <tr>
-              <td class="run-id">NB-0007</td>
-              <td>Canary · error_rate</td>
-              <td>kind</td>
-              <td><span class="badge pass">PASS</span></td>
-            </tr>
-            <tr>
-              <td class="run-id">NB-0006</td>
-              <td>titulo da proxima release @demo</td>
-              <td>workflow_dispatch</td>
-              <td><span class="badge fail">FAIL</span></td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="section-head">
+        <h2>Destaques da semana</h2>
+        <a href="/catalog.html">Ver os seis SKUs</a>
       </div>
+      <section class="grid featured-grid" data-testid="featured">
+        <article class="card">
+          <div class="swatch" style="background: linear-gradient(160deg, #2f5d50, #1a1714 88%);"></div>
+          <div class="card-body">
+            <span class="tag">Mais vendida</span>
+            <h3>Mochila Trail 32L</h3>
+            <p>Painel ventilado para travessia de um dia. R$ 289.</p>
+            <a class="btn" href="/product.html?sku=trail-32">Ver Trail 32L</a>
+          </div>
+        </article>
+        <article class="card">
+          <div class="swatch" style="background: linear-gradient(160deg, #c4a35a, #1a1714 88%);"></div>
+          <div class="card-body">
+            <span class="tag">Novidade</span>
+            <h3>Lanterna Apex 800</h3>
+            <p>800 lumens, USB-C, cabe no bolso. R$ 119.</p>
+            <a class="btn" href="/product.html?sku=apex-light">Ver Apex 800</a>
+          </div>
+        </article>
+        <article class="card">
+          <div class="swatch" style="background: linear-gradient(160deg, #6b4a32, #1a1714 88%);"></div>
+          <div class="card-body">
+            <span class="tag">Trilha</span>
+            <h3>Bota Granite Mid</h3>
+            <p>Cano médio e sola para pedra molhada. R$ 459.</p>
+            <a class="btn" href="/product.html?sku=granite-boot">Ver Granite</a>
+          </div>
+        </article>
+      </section>
     </main>
     <footer class="site-footer">
-      <p>Nimbus Gate · console de quality gate · Release 1.0</p>
+      <p>Nimbus Shop · Serra do Mar · Release 1.0</p>
     </footer>
     <script src="/app.js" defer></script>
   </body>

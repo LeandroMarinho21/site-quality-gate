@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("Joao reporta flake no smoke-home", async ({ page }) => {
+test("contato do Joao sobre a Granite Mid", async ({ page }) => {
   await page.goto("/contact.html");
   await page.getByTestId("contact-name").fill("João Ribeiro");
-  await page.getByTestId("contact-message").fill("Smoke · home e health flakando no pause de 10%.");
+  await page.getByTestId("contact-message").fill("A Granite Mid serve no 42?");
   await page.getByTestId("contact-form").getByRole("button", { name: "Enviar" }).click();
-  await expect(page.getByTestId("contact-result")).toHaveText("Flake registrado por João Ribeiro.");
+  await expect(page.getByTestId("contact-result")).toHaveText("Recebemos a mensagem de João Ribeiro.");
 });
 
 test("api de contato exige nome e mensagem", async ({ request }) => {

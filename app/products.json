@@ -1,0 +1,68 @@
+[
+  {
+    "sku": "trail-32",
+    "name": "Mochila Trail 32L",
+    "category": "mochilas",
+    "price": 289,
+    "stock": 14,
+    "tag": "Mais vendida",
+    "tone": "#2f5d50",
+    "blurb": "Painel traseiro ventilado e cinto lumbar para travessias de um dia na Serra do Mar.",
+    "specs": ["32 litros", "Capa de chuva", "1,05 kg"]
+  },
+  {
+    "sku": "apex-light",
+    "name": "Lanterna Apex 800",
+    "category": "iluminacao",
+    "price": 119,
+    "stock": 31,
+    "tag": "Novidade",
+    "tone": "#c4a35a",
+    "blurb": "800 lumens, modo strobe e clip para boné. Cabe no bolso da jaqueta.",
+    "specs": ["800 lm", "USB-C", "IPX6"]
+  },
+  {
+    "sku": "rain-shell",
+    "name": "Capa Storm 2.5L",
+    "category": "vestuario",
+    "price": 199,
+    "stock": 8,
+    "tag": "Impermeável",
+    "tone": "#3d5a73",
+    "blurb": "Costura selada e capuz ajustável. Pensada para chuva fina em trilha.",
+    "specs": ["2.5 camadas", "Capuz rígido", "Bolso peito"]
+  },
+  {
+    "sku": "granite-boot",
+    "name": "Bota Granite Mid",
+    "category": "calcados",
+    "price": 459,
+    "stock": 6,
+    "tag": "Trilha",
+    "tone": "#6b4a32",
+    "blurb": "Cano médio, sola aderente e membrana dry. Serve para pedra molhada.",
+    "specs": ["Cano 14 cm", "Sola mista", "Números 36–44"]
+  },
+  {
+    "sku": "termo-1l",
+    "name": "Garrafa Termo 1L",
+    "category": "acessorios",
+    "price": 89,
+    "stock": 40,
+    "tag": "Essencial",
+    "tone": "#8a8f86",
+    "blurb": "Inox duplo, mantém café quente na subida da Pedra do Sino.",
+    "specs": ["1 litro", "Inox 304", "Tampa rosca"]
+  },
+  {
+    "sku": "trek-pole",
+    "name": "Bastão Trek Alu",
+    "category": "acessorios",
+    "price": 149,
+    "stock": 18,
+    "tag": "Par",
+    "tone": "#5a6b48",
+    "blurb": "Trava flip-lock, ponteira de tungstênio. Vendido o par.",
+    "specs": ["Alumínio 7075", "65–135 cm", "220 g cada"]
+  }
+]

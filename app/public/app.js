@@ -1,7 +1,7 @@
-const CART_KEY = "nimbus-queue";
+const CART_KEY = "nimbus-cart";
 
 function money(n) {
-  return `${n}s`;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function readCart() {
@@ -38,13 +38,21 @@ async function fetchProducts() {
   return data.products || [];
 }
 
+function swatch(p) {
+  const tone = p.tone || "#2f5d50";
+  return `<div class="swatch" data-sku="${p.sku}" style="background: linear-gradient(160deg, ${tone}, #1a1714 88%);"></div>`;
+}
+
 function productCard(p) {
   return `<li class="card" data-sku="${p.sku}" data-testid="product-${p.sku}">
-    <span class="tag">${p.tag}</span>
-    <h3>${p.name}</h3>
-    <p>${p.blurb}</p>
-    <p class="price">${money(p.price)} est.</p>
-    <a class="btn" href="/product.html?sku=${p.sku}">Abrir suite</a>
+    ${swatch(p)}
+    <div class="card-body">
+      <span class="tag">${p.tag}</span>
+      <h3>${p.name}</h3>
+      <p>${p.blurb}</p>
+      <p class="price">${money(p.price)}</p>
+      <a class="btn" href="/product.html?sku=${p.sku}">Ver produto</a>
+    </div>
   </li>`;
 }
 
@@ -58,8 +66,7 @@ async function renderCatalog() {
   const filtered = products.filter((p) => {
     const byCat = category === "todos" || p.category === category;
     const byQ =
-      !q ||
-      `${p.name} ${p.blurb} ${p.sku} ${(p.specs || []).join(" ")}`.toLowerCase().includes(q);
+      !q || `${p.name} ${p.blurb} ${p.sku} ${(p.specs || []).join(" ")}`.toLowerCase().includes(q);
     return byCat && byQ;
   });
   const empty = document.querySelector("[data-testid=catalog-empty]");
@@ -80,26 +87,25 @@ async function renderProduct() {
   const sku = new URLSearchParams(location.search).get("sku");
   const res = await fetch(`/api/products/${encodeURIComponent(sku || "")}`);
   if (!res.ok) {
-    root.innerHTML = "<p data-testid=product-missing>Suite nao encontrada.</p>";
+    root.innerHTML = "<p data-testid=product-missing>Produto não encontrado.</p>";
     return;
   }
   const p = await res.json();
   root.innerHTML = `
-    <div class="swatch" data-sku="${p.sku}" aria-hidden="true"></div>
+    ${swatch(p)}
     <div>
-      <p class="tag">${p.tag} · ${p.category}</p>
+      <p class="tag">${p.tag}</p>
       <h1 data-testid="product-name">${p.name}</h1>
-      <p class="price" data-testid="product-price">${money(p.price)} estimados</p>
+      <p class="price" data-testid="product-price">${money(p.price)}</p>
       <p data-testid="product-blurb">${p.blurb}</p>
       <ul class="specs">${p.specs.map((s) => `<li>${s}</li>`).join("")}</ul>
-      <p>Runs recentes: <span data-testid="product-stock">${p.stock}</span></p>
-      <button class="btn" type="button" data-testid="add-to-cart">Enfileirar suite</button>
-      <p class="flash" hidden data-testid="added-flash">Na fila de execucao.</p>
+      <p>Estoque: <span data-testid="product-stock">${p.stock}</span></p>
+      <button class="btn" type="button" data-testid="add-to-cart">Adicionar à sacola</button>
+      <p class="flash" hidden data-testid="added-flash">Adicionado à sacola.</p>
     </div>`;
   root.querySelector("[data-testid=add-to-cart]").addEventListener("click", () => {
     addToCart(p.sku, 1);
-    const flash = root.querySelector("[data-testid=added-flash]");
-    flash.hidden = false;
+    root.querySelector("[data-testid=added-flash]").hidden = false;
   });
 }
 
@@ -128,7 +134,7 @@ async function renderCart() {
         <td>${p.name}</td>
         <td><input data-testid="qty-${p.sku}" type="number" min="1" value="${item.qty}" style="width:4rem" /></td>
         <td>${money(line)}</td>
-        <td><button type="button" data-testid="remove-${p.sku}">Remover</button></td>
+        <td><button type="button" class="btn" data-testid="remove-${p.sku}">Remover</button></td>
       </tr>`;
     })
     .join("");
@@ -138,10 +144,11 @@ async function renderCart() {
   body.querySelectorAll("input[type=number]").forEach((input) => {
     input.addEventListener("change", () => {
       const sku = input.closest("tr").dataset.sku;
-      const next = readCart().map((row) =>
-        row.sku === sku ? { ...row, qty: Math.max(1, Number(input.value) || 1) } : row,
+      writeCart(
+        readCart().map((row) =>
+          row.sku === sku ? { ...row, qty: Math.max(1, Number(input.value) || 1) } : row,
+        ),
       );
-      writeCart(next);
       renderCart();
     });
   });
@@ -163,31 +170,30 @@ async function bindCheckout() {
     const err = document.querySelector("[data-testid=checkout-error]");
     result.hidden = true;
     err.hidden = true;
-    const payload = {
-      customer: {
-        name: form.name.value.trim(),
-        email: form.email.value.trim(),
-        cep: form.cep.value.trim(),
-      },
-      items: readCart(),
-    };
     const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        customer: {
+          name: form.name.value.trim(),
+          email: form.email.value.trim(),
+          cep: form.cep.value.trim(),
+        },
+        items: readCart(),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
       err.hidden = false;
       err.textContent =
         data.error === "empty_cart"
-          ? "A fila de execucao esta vazia."
-          : "Nao foi possivel disparar o run. Confira dono, e-mail e ambiente.";
+          ? "A sacola está vazia."
+          : "Não foi possível fechar o pedido. Confira nome, e-mail e CEP.";
       return;
     }
     writeCart([]);
     result.hidden = false;
-    result.textContent = `Run ${data.order.id} disparado por ${data.order.customer.name}. Duracao ${money(data.order.total)}.`;
+    result.textContent = `Pedido ${data.order.id} confirmado para ${data.order.customer.name}. Total ${money(data.order.total)}.`;
   });
 }
 
