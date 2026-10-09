@@ -2,43 +2,74 @@ name: ci
 
 on:
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  regression:
+  unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-      - name: Install deps
-        run: npm ci
+      - run: npm ci
+      - name: Unit
+        run: >
+          node --test
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=tap --test-reporter-destination=unit-results.tap
+          "tests/unit/*.test.*"
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_KIND: unit
+          UNIT_TAP: unit-results.tap
+        run: node scripts/write-summary.js
+
+  layers:
+    name: contract, smoke, regression
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      BASE_URL: http://127.0.0.1:8080
+      APP_VERSION: ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
       - name: Start app
         run: docker compose up -d --build
       - name: Wait for health
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8080/health; then exit 0; fi
+            if curl -sf "$BASE_URL/health"; then exit 0; fi
             sleep 2
           done
           docker compose logs
           exit 1
       - name: Install Playwright
         run: npx playwright install --with-deps chromium
-      - name: Regression and smoke
+      - name: Contract, smoke e regression
         id: tests
-        run: npx playwright test --grep-invert @demo
-        env:
-          BASE_URL: http://127.0.0.1:8080
-      - name: Gate summary
+        run: EXPECTED_VERSION="$APP_VERSION" npx playwright test
+      - name: Summary
         if: always()
         env:
           SUMMARY_KIND: ci
-          PLAYWRIGHT_JSON: playwright-results.json
           CI_OUTCOME: ${{ steps.tests.outcome }}
         run: node scripts/write-summary.js
       - uses: actions/upload-artifact@v4

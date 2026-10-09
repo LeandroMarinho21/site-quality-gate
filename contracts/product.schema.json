@@ -1,0 +1,16 @@
+{
+  "$id": "product",
+  "type": "object",
+  "required": ["sku", "name", "category", "price", "stock", "tag", "tone", "blurb", "specs"],
+  "properties": {
+    "sku": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "category": { "enum": ["mochilas", "iluminacao", "vestuario", "calcados", "acessorios"] },
+    "price": { "type": "number", "exclusiveMinimum": 0 },
+    "stock": { "type": "integer", "minimum": 0 },
+    "tag": { "type": "string" },
+    "tone": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "blurb": { "type": "string" },
+    "specs": { "type": "array", "items": { "type": "string" } }
+  }
+}

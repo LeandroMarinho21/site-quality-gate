@@ -7,6 +7,11 @@ if (!out) {
   process.exit(0);
 }
 
+const GREEN = "2ea44f";
+const RED = "d1242f";
+const GREY = "6e7781";
+const AMBER = "bf8700";
+
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -16,159 +21,213 @@ function readJson(file) {
 }
 
 function badge(label, value, color) {
-  const l = encodeURIComponent(label);
-  const v = encodeURIComponent(value);
-  return `<img alt="${label} ${value}" src="https://img.shields.io/badge/${l}-${v}-${color}?style=for-the-badge" />`;
+  const enc = (s) => encodeURIComponent(String(s).replace(/-/g, "--"));
+  return `<img alt="${label} ${value}" src="https://img.shields.io/badge/${enc(label)}-${enc(value)}-${color}?style=for-the-badge" />`;
 }
 
-function outcomeColor(outcome) {
-  if (outcome === "success") return "2ea44f";
-  if (outcome === "failure") return "d1242f";
-  return "6e7781";
-}
+const pct = (n) => (n === undefined || n === null || Number.isNaN(Number(n)) ? "n/a" : `${(Number(n) * 100).toFixed(1)}%`);
+const ms = (n) => (n === undefined || n === null ? "n/a" : `${Math.round(n)} ms`);
+const secs = (n) => `${((n || 0) / 1000).toFixed(1)}s`;
 
-function outcomeLabel(outcome) {
+function outcomeCell(outcome) {
   if (outcome === "success") return "PASS";
-  if (outcome === "failure") return "FAIL";
-  return (outcome || "n/a").toUpperCase();
+  if (outcome === "failure") return "**FAIL**";
+  if (outcome === "skipped") return "pulado";
+  if (outcome === "cancelled") return "cancelado";
+  return "-";
 }
 
-function pct(rate) {
-  const n = Number(rate);
-  if (Number.isNaN(n)) return "n/a";
-  return `${(n * 100).toFixed(2)}%`;
+// Agrupa o JSON reporter do Playwright por projeto e detecta instabilidade entre repeticoes.
+function playwrightStats(report) {
+  const projects = new Map();
+  const runs = new Map();
+  if (!report) return { projects, flaky: [] };
+  const walk = (suites, file) => {
+    for (const suite of suites || []) {
+      const f = suite.file || file;
+      for (const spec of suite.specs || []) {
+        for (const t of spec.tests || []) {
+          const name = t.projectName || "default";
+          const p = projects.get(name) || { passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 0, failures: [] };
+          const duration = (t.results || []).reduce((sum, r) => sum + (r.duration || 0), 0);
+          p.durationMs += duration;
+          if (t.status === "expected") p.passed += 1;
+          else if (t.status === "skipped") p.skipped += 1;
+          else if (t.status === "flaky") p.flaky += 1;
+          else {
+            p.failed += 1;
+            if (!p.failures.includes(spec.title)) p.failures.push(spec.title);
+          }
+          projects.set(name, p);
+          const key = `${name} › ${f} › ${spec.title}`;
+          const r = runs.get(key) || { ok: 0, bad: 0 };
+          if (t.status === "expected") r.ok += 1;
+          else if (t.status !== "skipped") r.bad += 1;
+          runs.set(key, r);
+        }
+      }
+      walk(suite.suites, f);
+    }
+  };
+  walk(report.suites, "");
+  const flaky = [...runs].filter(([, r]) => r.ok > 0 && r.bad > 0).map(([key]) => key);
+  return { projects, flaky };
 }
 
-function tile(label, value, hint) {
-  return `<td align="center" width="20%">
-  <p><sub>${label}</sub></p>
-  <h2>${value}</h2>
-  ${hint ? `<p><sub>${hint}</sub></p>` : ""}
-</td>`;
+function layerTable(projects, order) {
+  const names = order.filter((n) => projects.has(n)).concat([...projects.keys()].filter((n) => !order.includes(n)));
+  const lines = ["| camada | passou | falhou | nao rodou | tempo |", "| --- | ---: | ---: | ---: | ---: |"];
+  for (const name of names) {
+    const p = projects.get(name);
+    lines.push(`| ${name} | ${p.passed} | ${p.failed ? `**${p.failed}**` : 0} | ${p.skipped} | ${secs(p.durationMs)} |`);
+  }
+  return lines;
+}
+
+function failureList(projects) {
+  const lines = [];
+  for (const [name, p] of projects) {
+    for (const title of p.failures) lines.push(`- \`${name}\` ${title}`);
+  }
+  return lines.length ? ["", "### Falhas", "", ...lines] : [];
+}
+
+function unitSummary() {
+  const tap = fs.existsSync(process.env.UNIT_TAP || "") ? fs.readFileSync(process.env.UNIT_TAP, "utf8") : "";
+  const count = (key) => Number((tap.match(new RegExp(`^# ${key} (\\d+(?:\\.\\d+)?)`, "m")) || [])[1] || 0);
+  const pass = count("pass");
+  const fail = count("fail");
+  const failures = [...tap.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((m) => m[1]).slice(0, 15);
+  const lines = ["# Unit", ""];
+  lines.push([badge("unit", fail ? "FAIL" : "PASS", fail ? RED : GREEN), badge("testes", pass + fail, GREY), badge("tempo", `${Math.round(count("duration_ms"))} ms`, GREY)].join(" "));
+  lines.push("", "Regras de pedido e contato, decisao canary vs stable e veredito do gate. Sem servidor, sem browser.");
+  if (failures.length) lines.push("", "### Falhas", "", ...failures.map((f) => `- ${f}`));
+  return lines;
+}
+
+function ciSummary() {
+  const { projects } = playwrightStats(readJson(process.env.PW_JSON || "playwright-results.json"));
+  const failed = [...projects.values()].some((p) => p.failed) || process.env.CI_OUTCOME === "failure";
+  const lines = ["# Contract → smoke → regression", ""];
+  lines.push(badge("camadas", failed ? "FAIL" : "PASS", failed ? RED : GREEN));
+  lines.push("", ...layerTable(projects, ["contract", "smoke", "regression"]));
+  lines.push("", "> Cada camada depende da anterior: contrato vermelho nem abre o browser. Regressao inclui axe (WCAG A/AA).");
+  lines.push(...failureList(projects));
+  lines.push("", "Relatorio HTML e traces nos artifacts deste run.");
+  return lines;
+}
+
+function nightlySummary() {
+  const { projects, flaky } = playwrightStats(readJson(process.env.PW_JSON || "playwright-results.json"));
+  const failed = [...projects.values()].some((p) => p.failed) || process.env.CI_OUTCOME === "failure";
+  const lines = ["# Nightly cross-browser", ""];
+  lines.push([badge("nightly", failed ? "FAIL" : "PASS", failed ? RED : GREEN), badge("instaveis", flaky.length, flaky.length ? AMBER : GREY)].join(" "));
+  lines.push("", ...layerTable(projects, ["firefox", "webkit", "mobile"]));
+  if (flaky.length) {
+    lines.push("", "### Instaveis (passou e falhou no mesmo run)", "", ...flaky.map((k) => `- ${k}`));
+    lines.push("", "> Teste instavel ganha dono: corrige ou vai para `@quarantine` com prazo. Nao se resolve com retry.");
+  }
+  lines.push(...failureList(projects));
+  return lines;
+}
+
+const STAGE_LABELS = {
+  budget: "error budget do stable",
+  canary: "canary 10% no ar",
+  analysis10: "analysis canary vs stable (10%)",
+  smoke10: "smoke no canary (10%)",
+  promote50: "canary 50%",
+  analysis50: "analysis canary vs stable (50%)",
+  smoke50: "smoke no canary (50%)",
+  promote100: "100% do trafego",
+  soak: "soak pos-promote",
+};
+
+function analysisRows(label, file) {
+  const data = readJson(file);
+  if (!data) return [];
+  if (!data.samples || !data.samples.length) return [`| ${label} | - | sem medicoes (${data.status}) | | | | |`];
+  return data.samples.map((s, i) => {
+    const mark = s.verdict === "pass" ? "PASS" : `**${s.verdict.toUpperCase()}**`;
+    return `| ${label} | ${i + 1}/${data.samples.length} | ${pct(s.canary.errorRate)} | ${pct(s.stable.errorRate)} | ${ms(s.canary.p95)} | ${ms(s.stable.p95)} | ${mark} |`;
+  });
+}
+
+function analysisReasons(files) {
+  const lines = [];
+  for (const file of files) {
+    const data = readJson(file);
+    const bad = (data?.samples || []).find((s) => s.verdict !== "pass");
+    if (!bad) continue;
+    lines.push(...bad.reasons.map((r) => `- ${r}`));
+    const paths = Object.entries(bad.canary.byPath || {})
+      .filter(([, p]) => p.errors > 0)
+      .map(([p, s]) => `\`${p}\` ${s.errors}/${s.samples}`);
+    if (paths.length) lines.push(`- erros do canary por rota: ${paths.join(", ")}`);
+    break;
+  }
+  return lines;
+}
+
+function deploySummary() {
+  const dir = process.env.GATE_DIR || path.join(process.env.RUNNER_TEMP || ".", "gate");
+  const v = readJson(path.join(dir, "verdict.json")) || { verdict: "INCOMPLETE", outcomes: {}, drill: process.env.DRILL || "none" };
+  const drill = v.drill && v.drill !== "none" ? v.drill : null;
+  const tag = process.env.IMAGE_TAG || "local";
+  const color = v.verdict === "PROMOTED" ? GREEN : v.verdict === "INCOMPLETE" ? GREY : RED;
+
+  const lines = [drill ? `# Drill do gate: ${drill}` : "# Canary quality gate", ""];
+  const badges = [badge("rollout", v.verdict, color)];
+  if (v.failureClass) badges.push(badge("falha", v.failureClass, RED));
+  if (drill) badges.push(badge("drill", v.drillCaught ? "PEGO" : "PASSOU DIRETO", v.drillCaught ? GREEN : RED));
+  lines.push(badges.join(" "), "");
+
+  if (drill) {
+    lines.push(
+      v.drillCaught
+        ? `> O gate barrou o defeito injetado na camada esperada (\`${v.drillExpected}\`). Job verde = o gate funciona. Nada foi promovido.`
+        : `> O defeito injetado era para cair em \`${v.drillExpected}\` e caiu em \`${v.failureClass || "nenhuma"}\`. O gate esta cego para esse tipo de falha.`,
+      "",
+    );
+  }
+  if (v.explain) lines.push(`**Por que:** ${v.explain}`, "");
+
+  const files = [path.join(dir, "analysis-10.json"), path.join(dir, "analysis-50.json")];
+  const rows = [...analysisRows("10%", files[0]), ...analysisRows("50%", files[1])];
+  if (rows.length) {
+    lines.push("### Canary vs stable", "");
+    lines.push("| degrau | medicao | erro canary | erro stable | p95 canary | p95 stable | resultado |");
+    lines.push("| --- | --- | ---: | ---: | ---: | ---: | --- |");
+    lines.push(...rows);
+    const reasons = analysisReasons(files);
+    if (reasons.length) lines.push("", ...reasons);
+    const limits = readJson(files[0])?.samples?.[0]?.limits;
+    if (limits) {
+      lines.push("", `<sub>reprova se erro do canary > ${pct(limits.maxErrorRate)}, se erra ${pct(limits.maxErrorDelta)} a mais que o stable, ou se p95 > stable x${limits.maxLatencyRatio} + ${limits.latencySlackMs} ms</sub>`);
+    }
+    lines.push("");
+  }
+
+  lines.push("### Etapas", "", "| etapa | resultado |", "| --- | --- |");
+  for (const [key, label] of Object.entries(STAGE_LABELS)) {
+    const outcome = v.outcomes?.[key];
+    if (!outcome) continue;
+    lines.push(`| ${label} | ${outcomeCell(outcome)}${v.failedAt === key ? " ← primeira falha" : ""} |`);
+  }
+
+  const smokeFailures = [];
+  for (const name of ["smoke-10.json", "smoke-50.json", "soak-1.json", "soak-2.json", "soak-3.json"]) {
+    const { projects } = playwrightStats(readJson(path.join(dir, name)));
+    for (const [project, p] of projects) for (const t of p.failures) smokeFailures.push(`- \`${name.replace(".json", "")}\` \`${project}\` ${t}`);
+  }
+  if (smokeFailures.length) lines.push("", "### Testes vermelhos", "", ...smokeFailures);
+
+  const budget = readJson(path.join(dir, "stable-budget.json"));
+  lines.push("");
+  lines.push(`<sub>imagem <code>${tag}</code> · smoke valida <code>/health.version == ${tag}</code> com <code>X-Canary: always</code>${budget ? ` · error rate do stable antes do canary ${pct(budget.error_rate)}` : ""}</sub>`);
+  return lines;
 }
 
 const kind = process.env.SUMMARY_KIND || "deploy";
-const metrics = readJson(process.env.GATE_METRICS_FILE || path.join(process.env.RUNNER_TEMP || ".", "gate-metrics.json")) || {};
-const pw = readJson(process.env.PLAYWRIGHT_JSON || "playwright-results.json");
-const smoke = process.env.SMOKE_OUTCOME || "";
-const analysis = process.env.ANALYSIS_OUTCOME || "";
-const metricsOutcome = process.env.METRICS_OUTCOME || "";
-const verdict = process.env.GATE_VERDICT || (smoke === "success" && metricsOutcome !== "failure" ? "PROMOTED" : "ABORTED");
-const verdictColor = verdict === "PROMOTED" ? "2ea44f" : "d1242f";
-const imageTag = process.env.IMAGE_TAG || process.env.GITHUB_SHA?.slice(0, 7) || "local";
-const demo = process.env.RUN_FALSE_POSITIVE === "true";
-
-let pwStats = { expected: 0, unexpected: 0, skipped: 0, durationMs: 0, failed: [] };
-if (pw?.stats) {
-  pwStats.expected = pw.stats.expected || 0;
-  pwStats.unexpected = pw.stats.unexpected || 0;
-  pwStats.skipped = pw.stats.skipped || 0;
-  pwStats.durationMs = pw.stats.duration || 0;
-}
-if (pw && Array.isArray(pw.suites)) {
-  const walk = (suites) => {
-    for (const suite of suites) {
-      for (const spec of suite.specs || []) {
-        for (const t of spec.tests || []) {
-          if (t.status && t.status !== "expected" && t.status !== "skipped") {
-            pwStats.failed.push(spec.title);
-          }
-        }
-      }
-      walk(suite.suites || []);
-    }
-  };
-  walk(pw.suites);
-}
-
-const lines = [];
-
-if (kind === "ci") {
-  const ok = pwStats.unexpected === 0 && (process.env.CI_OUTCOME || "success") === "success";
-  lines.push(`# Regression gate`);
-  lines.push("");
-  lines.push(
-    [
-      badge("tests", ok ? "PASS" : "FAIL", ok ? "2ea44f" : "d1242f"),
-      badge("passed", String(pwStats.expected), "2ea44f"),
-      badge("failed", String(pwStats.unexpected), pwStats.unexpected ? "d1242f" : "6e7781"),
-    ].join(" "),
-  );
-  lines.push("");
-  lines.push(`<table><tr>`);
-  lines.push(tile("passed", String(pwStats.expected), "smoke + regressão"));
-  lines.push(tile("failed", String(pwStats.unexpected), pwStats.failed[0] || "-"));
-  lines.push(tile("skipped", String(pwStats.skipped), "@demo fora do CI"));
-  lines.push(tile("duracao", `${(pwStats.durationMs / 1000).toFixed(1)}s`, "Chromium"));
-  lines.push(`</tr></table>`);
-  if (pwStats.failed.length) {
-    lines.push("");
-    lines.push(`### Falhas`);
-    for (const title of pwStats.failed) lines.push(`- ${title}`);
-  }
-  lines.push("");
-  lines.push(`> Relatorio HTML do Playwright esta nos artifacts deste run.`);
-} else {
-  lines.push(`# Canary quality gate`);
-  lines.push("");
-  lines.push(
-    [
-      badge("gate", verdict, verdictColor),
-      badge("metrics", outcomeLabel(metricsOutcome || "success"), outcomeColor(metricsOutcome || "success")),
-      badge("analysis", outcomeLabel(analysis || "success"), outcomeColor(analysis || "success")),
-      badge("smoke", outcomeLabel(smoke || "n/a"), outcomeColor(smoke || "n/a")),
-    ].join(" "),
-  );
-  lines.push("");
-  if (demo) {
-    lines.push(`> Demo de falso positivo: spec \`@demo\` ativo. Metricas do app podem estar saudaveis mesmo com o job vermelho.`);
-    lines.push("");
-  }
-  if (process.env.INJECT_ERRORS === "true") {
-    lines.push(`> Canary com INJECT_ERRORS: /checkout 5xx, error_rate acima do threshold, abort por metrica.`);
-    lines.push("");
-  }
-  lines.push(`<table><tr>`);
-  lines.push(tile("versao", metrics.version || imageTag, "APP_VERSION"));
-  lines.push(tile("requests", String(metrics.requests ?? "-"), "probe"));
-  lines.push(tile("erros", String(metrics.errors ?? "-"), "HTTP 4xx/5xx"));
-  lines.push(tile("error rate", pct(metrics.error_rate), `limite ${pct(metrics.threshold ?? 0.05)}`));
-  lines.push(`</tr></table>`);
-  lines.push("");
-  lines.push(`### Fluxo`);
-  lines.push("");
-  lines.push("```mermaid");
-  lines.push("flowchart LR");
-  lines.push("  B[baseline] --> C10[canary 10%]");
-  lines.push("  C10 --> P[pause]");
-  if (verdict === "PROMOTED") {
-    lines.push("  P --> G{metrics + smoke}");
-    lines.push("  G -->|pass| C50[canary 50%]");
-    lines.push("  C50 --> H[100% Healthy]");
-  } else {
-    lines.push("  P --> G{metrics + smoke}");
-    lines.push("  G -->|fail| A[abort]");
-  }
-  lines.push("```");
-  lines.push("");
-  lines.push(`### Checks`);
-  lines.push("");
-  lines.push("| etapa | resultado |");
-  lines.push("| --- | --- |");
-  lines.push(`| metricas \`/metrics\` | ${outcomeLabel(metricsOutcome || "success")} |`);
-  lines.push(`| analysis job | ${outcomeLabel(analysis || "success")} |`);
-  lines.push(`| Playwright smoke | ${outcomeLabel(smoke || "n/a")} |`);
-  lines.push(`| rollout | **${verdict}** |`);
-  if (pw) {
-    lines.push("");
-    lines.push(`Playwright: **${pwStats.expected}** ok · **${pwStats.unexpected}** falhou · ${((pwStats.durationMs || 0) / 1000).toFixed(1)}s`);
-    if (pwStats.failed.length) {
-      lines.push("");
-      for (const title of pwStats.failed) lines.push(`- ${title}`);
-    }
-  }
-  lines.push("");
-  lines.push(`<sub>imagem <code>${imageTag}</code> · threshold error_rate ${pct(metrics.threshold ?? 0.05)}</sub>`);
-}
-
-fs.appendFileSync(out, `${lines.join("\n")}\n`);
+const builders = { unit: unitSummary, ci: ciSummary, nightly: nightlySummary, deploy: deploySummary };
+fs.appendFileSync(out, `${(builders[kind] || deploySummary)().join("\n")}\n`);

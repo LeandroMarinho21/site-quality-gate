@@ -1,0 +1,39 @@
+{
+  "$id": "error",
+  "type": "object",
+  "required": ["ok", "error"],
+  "properties": {
+    "ok": { "const": false },
+    "error": {
+      "enum": [
+        "empty_cart",
+        "customer_required",
+        "invalid_name",
+        "invalid_email",
+        "invalid_cep",
+        "unknown_sku",
+        "sku_not_found",
+        "invalid_qty",
+        "out_of_stock",
+        "name_and_message_required",
+        "message_too_long",
+        "checkout_unavailable",
+        "bad_request"
+      ]
+    },
+    "sku": { "type": "string" },
+    "name": { "type": "string" },
+    "available": { "type": "integer" },
+    "max": { "type": "integer" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "error": { "const": "out_of_stock" } } },
+      "then": { "required": ["sku", "name", "available"] }
+    },
+    {
+      "if": { "properties": { "error": { "const": "invalid_qty" } } },
+      "then": { "required": ["max"] }
+    }
+  ]
+}

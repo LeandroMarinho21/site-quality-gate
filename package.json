@@ -2,12 +2,16 @@
   "name": "site-quality-gate",
   "private": true,
   "scripts": {
-    "test": "playwright test --grep-invert @demo",
-    "test:smoke": "playwright test tests/smoke --grep-invert @demo",
-    "test:regression": "playwright test tests/regression",
-    "test:demo": "playwright test --grep @demo"
+    "start": "node app/server.js",
+    "test": "npm run test:unit && playwright test",
+    "test:unit": "node --test \"tests/unit/*.test.*\"",
+    "test:contract": "playwright test --project=contract",
+    "test:smoke": "playwright test --project=smoke --no-deps",
+    "test:regression": "playwright test --project=regression --no-deps"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.0"
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.51.0",
+    "ajv": "^8.20.0"
   }
 }

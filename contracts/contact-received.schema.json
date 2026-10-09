@@ -1,0 +1,9 @@
+{
+  "$id": "contact-received",
+  "type": "object",
+  "required": ["ok", "message"],
+  "properties": {
+    "ok": { "const": true },
+    "message": { "type": "string", "minLength": 1 }
+  }
+}

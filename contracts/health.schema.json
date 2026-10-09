@@ -1,0 +1,9 @@
+{
+  "$id": "health",
+  "type": "object",
+  "required": ["status", "version"],
+  "properties": {
+    "status": { "const": "ok" },
+    "version": { "type": "string", "minLength": 1 }
+  }
+}

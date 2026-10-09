@@ -1,38 +1,37 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/fixtures";
+import { brl, customers, product } from "../support/data";
 
-test.beforeEach(async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("nimbus-cart"));
+test("checkout da Mariana com Trail e Apex fecha o pedido com o total certo", async ({ page, shop }) => {
+  const trail = product("trail-32");
+  const apex = product("apex-light");
+  await shop.addToBag(trail.sku);
+  await shop.addToBag(apex.sku);
+  await shop.checkout(customers.mariana);
+  const result = page.getByTestId("checkout-result");
+  await expect(result).toContainText(customers.mariana.name);
+  await expect(result).toContainText(brl(trail.price + apex.price));
+  await expect(page.getByTestId("checkout-error")).toBeHidden();
 });
 
-test("checkout da Mariana com a Trail 32L gera pedido", async ({ page }) => {
-  await page.goto("/product.html?sku=trail-32");
-  await page.getByTestId("add-to-cart").click();
-  await page.goto("/checkout.html");
-  await page.getByTestId("checkout-name").fill("Mariana Alves");
-  await page.getByTestId("checkout-email").fill("mariana.alves@example.com");
-  await page.getByTestId("checkout-cep").fill("01310-100");
-  await page.getByTestId("checkout-form").getByRole("button", { name: "Confirmar pedido" }).click();
-  await expect(page.getByTestId("checkout-result")).toContainText("Mariana Alves");
-  await expect(page.getByTestId("checkout-result")).toContainText("R$ 289,00");
-  await expect(page.getByTestId("cart-count")).toHaveText("0");
-});
-
-test("checkout com sacola vazia mostra erro", async ({ page }) => {
-  await page.goto("/checkout.html");
-  await page.getByTestId("checkout-name").fill("João Ribeiro");
-  await page.getByTestId("checkout-email").fill("joao.ribeiro@example.com");
-  await page.getByTestId("checkout-cep").fill("22041-080");
-  await page.getByTestId("checkout-form").getByRole("button", { name: "Confirmar pedido" }).click();
+test("checkout com sacola vazia avisa e nao confirma", async ({ page, shop }) => {
+  await shop.checkout(customers.joao);
   await expect(page.getByTestId("checkout-error")).toHaveText("A sacola está vazia.");
+  await expect(page.getByTestId("checkout-result")).toBeHidden();
 });
 
-test("api recusa sku inexistente", async ({ request }) => {
-  const res = await request.post("/api/orders", {
-    data: {
-      customer: { name: "Ana", email: "ana@example.com", cep: "01310-100" },
-      items: [{ sku: "nao-existe", qty: 1 }],
-    },
-  });
-  expect(res.status()).toBe(400);
+test("CEP invalido explica o formato e mantem a sacola", async ({ page, shop }) => {
+  await shop.addToBag("trail-32");
+  await shop.checkout({ ...customers.mariana, cep: "0131" });
+  await expect(page.getByTestId("checkout-error")).toHaveText("CEP inválido. Use 8 dígitos, como 01310-100.");
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+});
+
+test("quantidade acima do estoque mostra quanto resta", async ({ page, shop }) => {
+  const boot = product("granite-boot");
+  await shop.addToBag(boot.sku);
+  await shop.setQty(boot.sku, boot.stock + 1);
+  await shop.checkout(customers.joao);
+  await expect(page.getByTestId("checkout-error")).toHaveText(
+    `Estoque insuficiente para ${boot.name}: restam ${boot.stock}.`,
+  );
 });
