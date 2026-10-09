@@ -75,6 +75,7 @@ jobs:
         run: |
           kind load docker-image site-quality-gate:bootstrap --name site-quality-gate
           kind load docker-image "site-quality-gate:$IMAGE_TAG" --name site-quality-gate
+          docker pull -q node:22-alpine
           kind load docker-image node:22-alpine --name site-quality-gate
       - name: Apply baseline
         run: |
