@@ -1,59 +1,71 @@
 # site-quality-gate
 
-Loja de demonstração **Nimbus Shop** (Trail 32L, Apex 800, Granite Mid). O quality gate continua por trás: regressão no PR, canary com peso de tráfego, smoke e métricas antes de promover.
+Loja de demonstração **Nimbus Shop** (Trail 32L, Apex 800, Granite Mid) com um quality gate completo atrás: pirâmide de testes no PR, canary com Argo Rollouts comparando a revisão nova contra a atual, smoke no canary, soak depois do promote e drills que testam o próprio gate.
 
-Fluxos nos testes: busca “lanterna”, filtro de calçados, sacola Trail + Apex, checkout da Mariana Alves (CEP 01310-100) e contato do João Ribeiro sobre a Granite.
+O cluster **não fica no ar 24/7**. Cada push em `main` sobe um [kind](https://kind.sigs.k8s.io/) no GitHub Actions, faz o rollout e descarta tudo. Plano gratuito do GitHub, repo público, sem conta de cloud.
 
-O cluster **não fica no ar 24/7**. Cada push em `main` sobe um [kind](https://kind.sigs.k8s.io/) no GitHub Actions, aplica um [Argo Rollouts](https://argo-rollouts.readthedocs.io/) canary (10% → pause → 50% → pause → 100%), lê `/metrics` e só então promove. Tudo no plano gratuito do GitHub, repo público, sem conta de cloud.
+A estratégia completa (riscos, camadas, critério de promote, classes de falha) está em [`docs/test-strategy.md`](docs/test-strategy.md).
 
-## Como o gate funciona
+## O gate
 
 ```
-PR  → Docker Compose + Playwright (smoke e regressão)
+PR / push
+  unit (node:test)                    regras de pedido, decisão do canary, veredito
+  contract → smoke → regression       Playwright; camada vermelha pula as seguintes
+
 main → kind + Ingress NGINX + Argo Rollouts
-     → canary 10% → analysis error_rate (service canary)
-     → pause
-     → smoke com header X-Canary: always
-     → promote ou abort
+  error budget do stable              stable ruim = canary nem começa
+  canary 10%
+    analysis canary vs stable ×3      erro, delta de erro e p95 contra o stable
+    smoke com X-Canary: always        confere /health.version == sha
+  canary 50%  (de novo)
+  100%
+    soak: 3 rodadas de smoke          falhou = rollback
 ```
 
-O smoke do deploy manda `X-Canary: always` no Ingress, então as requests batem no replica novo — não na mistura 10/90. O AnalysisTemplate do Argo consulta o Service canary direto. Pause de 10 min é teto; o Actions promove antes disso.
+O analysis roda dentro do cluster, como Job do `AnalysisTemplate`, e bate nos Services `canary` e `stable` com as mesmas sondas, intercaladas. Se o canary piorar, o Argo aborta sozinho; o Actions só lê o resultado e monta o resumo.
 
-Métricas vêm do próprio app (`GET /metrics` e `/status`). O job do Actions imprime `requests`, `errors`, `error_rate` e o threshold (5%). Sem Prometheus nem Grafana.
+Thresholds: erro do canary ≤ 5%, no máximo 2 p.p. acima do stable, p95 ≤ stable × 1,5 + 50 ms, 20 amostras no mínimo.
+
+## Drills
+
+Actions → **deploy** → Run workflow → `drill`:
+
+| drill | o que injeta | tem que cair em |
+| --- | --- | --- |
+| `inject-errors` | 500 em `/checkout` e `/api/orders` no canary | analysis (`sli`) |
+| `inject-latency` | +400 ms por request no canary | analysis (`sli`) |
+| `false-positive` | teste que espera "Release 2.0" | smoke (`functional`) |
+
+Em drill nada é promovido. O job fica **verde quando o gate pega o defeito na camada certa** e vermelho quando deixa passar. O resumo mostra a tabela canary vs stable e quais rotas falharam.
 
 ## Rodar local
 
 ```bash
-docker compose up --build
 npm ci
 npx playwright install chromium
-npm test
+npm start                      # outra aba
+npm test                       # unit + contract + smoke + regression
 ```
 
-App em `http://127.0.0.1:8080`. Canary local (opcional, precisa de Docker, kind e kubectl):
+Camadas separadas: `npm run test:unit`, `test:contract`, `test:smoke`, `test:regression`.
+
+Comparar duas revisões na mão:
 
 ```bash
-bash scripts/kind-up.sh
+PORT=8081 INJECT_LATENCY_MS=300 node app/server.js &
+CANARY_URL=http://127.0.0.1:8081 STABLE_URL=http://127.0.0.1:8080 node scripts/canary-compare.mjs
 ```
 
-## Falso positivo (demo, depois apague)
-
-Há um spec `@demo` em `tests/smoke/demo-false-positive.spec.ts` que espera o título **Release 2.0** (o site está em 1.0). Ele **não** roda no CI de PR.
-
-Para gravar um job vermelho depois do verde:
-
-1. Espere o `deploy` em `main` ficar verde.
-2. Actions → **deploy** → Run workflow → marque `run_false_positive`.
-3. O smoke falha, o rollout dá abort, as métricas continuam abaixo do threshold.
-4. Apague o spec, o input no workflow e este parágrafo.
-
-## Vermelho real (métrica)
-
-Actions → **deploy** → Run workflow → marque `inject_errors`. O canary sobe com `INJECT_ERRORS=1`, `/checkout` devolve 500, o analysis aborta o rollout e o job fica vermelho com error_rate acima de 5%.
+Cross-browser como no nightly: `npx playwright install firefox webkit`, depois `CROSS_BROWSER=1 npx playwright test --project=firefox --project=webkit --project=mobile`.
 
 ## Layout
 
-- `app/` — servidor HTTP e páginas
-- `tests/smoke` e `tests/regression` — Playwright
-- `k8s/` — Rollout, Services, Ingress, analysis
-- `.github/workflows/ci.yml` e `deploy.yml`
+- `app/` — servidor HTTP sem dependências; regras em `app/lib/orders.js`
+- `contracts/` — JSON Schema das respostas da API
+- `tests/unit`, `tests/contract`, `tests/smoke`, `tests/regression`, `tests/drills`
+- `tests/support/` — fixtures, ações da loja, dados de teste
+- `k8s/` — Rollout, Services, Ingress, AnalysisTemplate
+- `scripts/canary-compare.mjs` — comparação canary vs stable (cluster e runner)
+- `scripts/gate-verdict.mjs` — veredito e classe de falha
+- `.github/workflows/` — `ci.yml`, `deploy.yml`, `nightly.yml`

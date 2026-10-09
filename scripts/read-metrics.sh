@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Error budget do stable: sonda / e /checkout e le o /metrics de um pod.
 set -euo pipefail
 BASE="${1:-http://127.0.0.1:8080}"
 THRESHOLD="${ERROR_RATE_THRESHOLD:-0.05}"

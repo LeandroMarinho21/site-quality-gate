@@ -22,9 +22,11 @@ spec:
             - containerPort: 8080
           env:
             - name: APP_VERSION
-              value: "1.0.0"
+              value: "APP_VERSION_VALUE"
             - name: INJECT_ERRORS
               value: "INJECT_ERRORS_VALUE"
+            - name: INJECT_LATENCY_MS
+              value: "INJECT_LATENCY_MS_VALUE"
           readinessProbe:
             httpGet:
               path: /health
@@ -45,19 +47,19 @@ spec:
       trafficRouting:
         nginx:
           stableIngress: site-quality-gate
+          # Sem canary-by-header-value: "always" forca o canary e "never" forca o stable.
           additionalIngressAnnotations:
             canary-by-header: X-Canary
-            canary-by-header-value: always
       steps:
         - setWeight: 10
         - analysis:
             templates:
-              - templateName: error-rate
+              - templateName: canary-vs-stable
         - pause:
             duration: 10m
         - setWeight: 50
         - analysis:
             templates:
-              - templateName: error-rate
+              - templateName: canary-vs-stable
         - pause:
             duration: 10m

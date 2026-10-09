@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: canary-vs-stable
+  namespace: site-quality-gate
+spec:
+  metrics:
+    # Tres medicoes por degrau: um pico isolado nao promove nem aborta sozinho.
+    - name: canary-vs-stable
+      count: 3
+      interval: 20s
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: compare
+                    image: node:22-alpine
+                    imagePullPolicy: IfNotPresent
+                    command: ["node", "/gate/canary-compare.mjs"]
+                    env:
+                      - name: CANARY_URL
+                        value: http://site-quality-gate-canary.site-quality-gate.svc.cluster.local
+                      - name: STABLE_URL
+                        value: http://site-quality-gate-stable.site-quality-gate.svc.cluster.local
+                      - name: PROBE_ROUNDS
+                        value: "10"
+                      - name: MAX_ERROR_RATE
+                        value: "0.05"
+                      - name: MAX_ERROR_DELTA
+                        value: "0.02"
+                      - name: MAX_LATENCY_RATIO
+                        value: "1.5"
+                      - name: LATENCY_SLACK_MS
+                        value: "50"
+                    volumeMounts:
+                      - name: gate
+                        mountPath: /gate
+                volumes:
+                  - name: gate
+                    configMap:
+                      name: gate-scripts

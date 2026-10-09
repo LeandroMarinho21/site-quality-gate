@@ -3,37 +3,52 @@ name: deploy
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
     inputs:
-      run_false_positive:
-        description: Run disposable false-positive smoke spec (expect red)
-        type: boolean
-        default: false
-      inject_errors:
-        description: Canary with INJECT_ERRORS (expect metric abort)
-        type: boolean
-        default: false
+      drill:
+        description: Exercicio do gate. Em drill o rollout nunca e promovido.
+        type: choice
+        default: none
+        options:
+          - none
+          - false-positive
+          - inject-errors
+          - inject-latency
 
 permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   canary:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
+      NS: site-quality-gate
+      ROLLOUT: site-quality-gate
       BASE_URL: http://127.0.0.1:8080
+      DRILL: ${{ inputs.drill || 'none' }}
       ERROR_RATE_THRESHOLD: "0.05"
-      CANARY_HEADER: always
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-      - name: Install kubectl-argo-rollouts
+      - name: Gate workspace
         run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "GATE_DIR=$RUNNER_TEMP/gate" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/gate"
+      - name: Install tools
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
           curl -sSL -o kubectl-argo-rollouts https://github.com/argoproj/argo-rollouts/releases/download/v1.8.3/kubectl-argo-rollouts-linux-amd64
           chmod +x kubectl-argo-rollouts
           sudo mv kubectl-argo-rollouts /usr/local/bin/kubectl-argo-rollouts
@@ -47,12 +62,11 @@ jobs:
         run: bash scripts/kind-up.sh
       - name: Build image
         run: |
-          TAG="${GITHUB_SHA::7}"
-          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
-          docker build -t "site-quality-gate:$TAG" .
-          docker tag "site-quality-gate:$TAG" site-quality-gate:bootstrap
-          docker tag "site-quality-gate:$TAG" "ghcr.io/${GITHUB_REPOSITORY,,}:$TAG"
+          docker build -t "site-quality-gate:$IMAGE_TAG" .
+          docker tag "site-quality-gate:$IMAGE_TAG" site-quality-gate:bootstrap
+          docker tag "site-quality-gate:$IMAGE_TAG" "ghcr.io/${GITHUB_REPOSITORY,,}:$IMAGE_TAG"
       - name: Push GHCR
+        if: github.event_name == 'push'
         continue-on-error: true
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -61,85 +75,143 @@ jobs:
         run: |
           kind load docker-image site-quality-gate:bootstrap --name site-quality-gate
           kind load docker-image "site-quality-gate:$IMAGE_TAG" --name site-quality-gate
+          kind load docker-image node:22-alpine --name site-quality-gate
       - name: Apply baseline
         run: |
           kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/service-stable.yaml -f k8s/service-canary.yaml -f k8s/ingress.yaml -f k8s/analysis-error-rate.yaml
-          sed -e "s|image: site-quality-gate:local|image: site-quality-gate:bootstrap|" \
-              -e "s|INJECT_ERRORS_VALUE|0|" k8s/rollout.yaml | kubectl apply -f -
-          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Healthy
-      - name: Start canary revision
-        run: |
-          INJECT=0
-          if [ "${{ github.event.inputs.inject_errors }}" = "true" ]; then INJECT=1; fi
-          sed -e "s|image: site-quality-gate:local|image: site-quality-gate:${IMAGE_TAG}|" \
-              -e "s|INJECT_ERRORS_VALUE|${INJECT}|" k8s/rollout.yaml | kubectl apply -f -
-          bash scripts/wait-rollout-paused.sh site-quality-gate site-quality-gate Paused,Degraded
-      - name: Metrics
-        id: metrics
+          kubectl create configmap gate-scripts -n "$NS" \
+            --from-file=canary-compare.mjs=scripts/canary-compare.mjs \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f k8s/service-stable.yaml -f k8s/service-canary.yaml -f k8s/ingress.yaml -f k8s/analysis-canary-vs-stable.yaml
+          bash scripts/render-rollout.sh site-quality-gate:bootstrap baseline | kubectl apply -f -
+          bash scripts/wait-rollout-phase.sh "$NS" "$ROLLOUT" Healthy
+
+      - name: Error budget do stable
+        id: budget
         env:
-          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
+          GATE_METRICS_FILE: ${{ runner.temp }}/gate/stable-budget.json
         run: bash scripts/read-metrics.sh "$BASE_URL"
-      - name: Analysis
-        id: analysis
+
+      - name: Canary 10%
+        id: canary
         run: |
-          PHASE=$(kubectl get rollout site-quality-gate -n site-quality-gate -o jsonpath='{.status.phase}')
-          echo "rollout phase=$PHASE"
-          kubectl argo rollouts get rollout site-quality-gate -n site-quality-gate || true
-          if [ "$PHASE" = "Degraded" ]; then exit 1; fi
-      - name: Install Playwright
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Smoke
-        id: smoke
-        run: |
-          if [ "${{ github.event.inputs.run_false_positive }}" = "true" ]; then
-            npx playwright test tests/smoke
-          else
-            npx playwright test tests/smoke --grep-invert @demo
-          fi
-      - name: Promote or abort
-        id: gate
-        if: always() && steps.smoke.outcome != 'skipped'
+          ERR=0
+          LAT=0
+          case "$DRILL" in
+            inject-errors) ERR=1 ;;
+            inject-latency) LAT=400 ;;
+          esac
+          bash scripts/render-rollout.sh "site-quality-gate:$IMAGE_TAG" "$IMAGE_TAG" "$ERR" "$LAT" | kubectl apply -f -
+          bash scripts/wait-rollout-phase.sh "$NS" "$ROLLOUT" Paused,Degraded 2
+
+      - name: Analysis canary vs stable (10%)
+        id: analysis10
+        continue-on-error: ${{ env.DRILL != 'none' }}
+        run: bash scripts/analysis-result.sh "$NS" "$ROLLOUT" "$GATE_DIR/analysis-10.json"
+
+      - name: Smoke no canary (10%)
+        id: smoke10
+        if: steps.analysis10.outcome == 'success'
+        continue-on-error: ${{ env.DRILL != 'none' }}
+        timeout-minutes: 3
         env:
-          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
+          CI: "true"
+          CANARY_HEADER: always
+          GATE_DRILL: ${{ env.DRILL }}
+          PW_JSON: ${{ runner.temp }}/gate/smoke-10.json
+          PW_HTML_DIR: playwright-report/smoke-10
         run: |
-          set -euo pipefail
-          NS=site-quality-gate
-          NAME=site-quality-gate
-          if [ "${{ steps.metrics.outcome }}" != "success" ] || [ "${{ steps.analysis.outcome }}" != "success" ] || [ "${{ steps.smoke.outcome }}" != "success" ]; then
-            echo "GATE_VERDICT=ABORTED" >> "$GITHUB_ENV"
-            echo "verdict=ABORTED" >> "$GITHUB_OUTPUT"
-            kubectl argo rollouts abort "$NAME" -n "$NS" || true
-            kubectl argo rollouts get rollout "$NAME" -n "$NS" || true
-            exit 1
-          fi
-          kubectl argo rollouts promote "$NAME" -n "$NS"
-          bash scripts/wait-rollout-paused.sh "$NS" "$NAME" Paused
+          PROJECTS="--project=smoke"
+          if [ "$DRILL" = "false-positive" ]; then PROJECTS="$PROJECTS --project=drill"; fi
+          EXPECTED_VERSION="$IMAGE_TAG" npx playwright test $PROJECTS --no-deps
+
+      - name: Promote para 50%
+        id: promote50
+        if: env.DRILL == 'none'
+        run: |
+          kubectl argo rollouts promote "$ROLLOUT" -n "$NS"
+          bash scripts/wait-rollout-phase.sh "$NS" "$ROLLOUT" Paused,Degraded 5
+
+      - name: Analysis canary vs stable (50%)
+        id: analysis50
+        if: env.DRILL == 'none'
+        run: bash scripts/analysis-result.sh "$NS" "$ROLLOUT" "$GATE_DIR/analysis-50.json"
+
+      - name: Smoke no canary (50%)
+        id: smoke50
+        if: env.DRILL == 'none'
+        timeout-minutes: 3
+        env:
+          CI: "true"
+          CANARY_HEADER: always
+          PW_JSON: ${{ runner.temp }}/gate/smoke-50.json
+          PW_HTML_DIR: playwright-report/smoke-50
+        run: EXPECTED_VERSION="$IMAGE_TAG" npx playwright test --project=smoke --no-deps
+
+      - name: Promote para 100%
+        id: promote100
+        if: env.DRILL == 'none'
+        run: |
+          kubectl argo rollouts promote "$ROLLOUT" -n "$NS"
+          bash scripts/wait-rollout-phase.sh "$NS" "$ROLLOUT" Healthy
+
+      - name: Soak pos-promote
+        id: soak
+        if: env.DRILL == 'none'
+        timeout-minutes: 5
+        env:
+          CI: "true"
+          GATE_METRICS_FILE: ${{ runner.temp }}/gate/soak-metrics.json
+          PW_HTML_DIR: playwright-report/soak
+        run: |
+          for round in 1 2 3; do
+            echo "soak $round/3 sem header, 100% no stable novo"
+            PW_JSON="$GATE_DIR/soak-$round.json" EXPECTED_VERSION="$IMAGE_TAG" npx playwright test --project=smoke --no-deps
+            sleep 20
+          done
           bash scripts/read-metrics.sh "$BASE_URL"
-          npx playwright test tests/smoke --grep-invert @demo
-          kubectl argo rollouts promote "$NAME" -n "$NS"
-          bash scripts/wait-rollout-paused.sh "$NS" "$NAME" Healthy
-          kubectl argo rollouts get rollout "$NAME" -n "$NS"
-          echo "GATE_VERDICT=PROMOTED" >> "$GITHUB_ENV"
-          echo "verdict=PROMOTED" >> "$GITHUB_OUTPUT"
+
+      - name: Rollback
+        if: failure() && steps.soak.outcome == 'failure'
+        run: |
+          kubectl argo rollouts undo "$ROLLOUT" -n "$NS"
+          kubectl argo rollouts promote "$ROLLOUT" -n "$NS" --full
+          bash scripts/wait-rollout-phase.sh "$NS" "$ROLLOUT" Healthy
+
+      - name: Abort
+        if: always() && steps.canary.outcome != 'skipped' && steps.promote100.outcome != 'success'
+        run: |
+          kubectl argo rollouts abort "$ROLLOUT" -n "$NS" || true
+          kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" || true
+
+      - name: Veredito
+        id: verdict
+        if: always()
+        env:
+          OUT: ${{ runner.temp }}/gate/verdict.json
+          OUTCOME_BUDGET: ${{ steps.budget.outcome }}
+          OUTCOME_CANARY: ${{ steps.canary.outcome }}
+          OUTCOME_ANALYSIS10: ${{ steps.analysis10.outcome }}
+          OUTCOME_SMOKE10: ${{ steps.smoke10.outcome }}
+          OUTCOME_PROMOTE50: ${{ steps.promote50.outcome }}
+          OUTCOME_ANALYSIS50: ${{ steps.analysis50.outcome }}
+          OUTCOME_SMOKE50: ${{ steps.smoke50.outcome }}
+          OUTCOME_PROMOTE100: ${{ steps.promote100.outcome }}
+          OUTCOME_SOAK: ${{ steps.soak.outcome }}
+        run: node scripts/gate-verdict.mjs
+
       - name: Gate summary
         if: always()
         env:
           SUMMARY_KIND: deploy
-          GATE_METRICS_FILE: ${{ runner.temp }}/gate-metrics.json
-          PLAYWRIGHT_JSON: playwright-results.json
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          ANALYSIS_OUTCOME: ${{ steps.analysis.outcome }}
-          METRICS_OUTCOME: ${{ steps.metrics.outcome }}
-          GATE_VERDICT: ${{ steps.gate.outputs.verdict }}
-          RUN_FALSE_POSITIVE: ${{ github.event.inputs.run_false_positive }}
-          INJECT_ERRORS: ${{ github.event.inputs.inject_errors }}
         run: node scripts/write-summary.js
+
       - uses: actions/upload-artifact@v4
-        if: always() && hashFiles('playwright-report/**') != ''
+        if: always()
         with:
-          name: playwright-report-canary
-          path: playwright-report
+          name: gate-${{ env.DRILL }}
+          path: |
+            playwright-report
+            ${{ runner.temp }}/gate
           retention-days: 7
+          if-no-files-found: ignore
