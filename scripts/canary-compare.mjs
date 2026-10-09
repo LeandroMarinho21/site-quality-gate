@@ -147,7 +147,7 @@ async function main() {
     mkdirSync(dirname(process.env.OUT), { recursive: true });
     writeFileSync(process.env.OUT, `${JSON.stringify(result, null, 2)}\n`);
   }
-  process.exit(result.verdict === "pass" ? 0 : 1);
+  process.exitCode = result.verdict === "pass" ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -22,13 +22,21 @@ JOBS=$(kubectl get jobs -n "$NS" -o json \
   | jq -r --arg run "$RUN" '.items[] | select(any(.metadata.ownerReferences[]?; .name == $run)) | .metadata.name' \
   | sort)
 
+LOGS=$(mktemp)
 for job in $JOBS; do
   echo "--- $job"
-  kubectl logs -n "$NS" "job/$job" 2>/dev/null | grep -v '^GATE_RESULT ' || true
+  POD=$(kubectl get pods -n "$NS" -l "job-name=$job" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [ -z "$POD" ]; then
+    echo "pod do job nao encontrado"
+    kubectl get pods -n "$NS" --show-labels | grep -F "$job" || true
+    continue
+  fi
+  kubectl logs -n "$NS" "$POD" > "$LOGS.one" || echo "kubectl logs falhou para $POD"
+  grep -v '^GATE_RESULT ' "$LOGS.one" || true
+  sed -n 's/^GATE_RESULT //p' "$LOGS.one" >> "$LOGS"
 done
 
-{ for job in $JOBS; do kubectl logs -n "$NS" "job/$job" 2>/dev/null | sed -n 's/^GATE_RESULT //p' || true; done; } \
-  | jq -s --arg run "$RUN" --arg status "$STATUS" '{run: $run, status: $status, samples: .}' > "$OUT"
+jq -s --arg run "$RUN" --arg status "$STATUS" '{run: $run, status: $status, samples: .}' "$LOGS" > "$OUT"
 
 PHASE=$(kubectl get rollout "$NAME" -n "$NS" -o jsonpath='{.status.phase}')
 echo "rollout phase=$PHASE"
