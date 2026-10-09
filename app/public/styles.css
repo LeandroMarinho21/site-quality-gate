@@ -7,6 +7,7 @@
   --pine: #1f4a3e;
   --pine-soft: #2f6b58;
   --clay: #b85a32;
+  --clay-ink: #9a4a28;
   --sand: #e8dcc8;
 }
 
@@ -127,7 +128,7 @@ a:hover { color: var(--clay); }
   font-size: 0.75rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--clay);
+  color: var(--clay-ink);
   margin: 0 0 0.5rem;
   font-weight: 700;
 }
@@ -183,7 +184,7 @@ a:hover { color: var(--clay); }
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--clay);
+  color: var(--clay-ink);
   font-weight: 700;
 }
 .price { font-size: 1.05rem; font-weight: 700; }

@@ -148,7 +148,7 @@ async function renderCart() {
       total += line;
       return `<tr data-sku="${p.sku}">
         <td>${p.name}</td>
-        <td><input data-testid="qty-${p.sku}" type="number" min="1" value="${item.qty}" style="width:4rem" /></td>
+        <td><input data-testid="qty-${p.sku}" type="number" min="1" value="${item.qty}" aria-label="Quantidade de ${p.name}" style="width:4rem" /></td>
         <td>${money(line)}</td>
         <td><button type="button" class="btn" data-testid="remove-${p.sku}">Remover</button></td>
       </tr>`;
@@ -177,6 +177,25 @@ async function renderCart() {
   });
 }
 
+function checkoutError(data) {
+  switch (data.error) {
+    case "empty_cart":
+      return "A sacola está vazia.";
+    case "invalid_email":
+      return "E-mail inválido.";
+    case "invalid_cep":
+      return "CEP inválido. Use 8 dígitos, como 01310-100.";
+    case "invalid_name":
+      return "Informe o nome completo.";
+    case "out_of_stock":
+      return `Estoque insuficiente para ${data.name}: restam ${data.available}.`;
+    case "invalid_qty":
+      return `Quantidade por item vai de 1 a ${data.max}.`;
+    default:
+      return "Não foi possível fechar o pedido. Tente de novo em instantes.";
+  }
+}
+
 async function bindCheckout() {
   const form = document.querySelector("[data-testid=checkout-form]");
   if (!form) return;
@@ -198,13 +217,10 @@ async function bindCheckout() {
         items: readCart(),
       }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       err.hidden = false;
-      err.textContent =
-        data.error === "empty_cart"
-          ? "A sacola está vazia."
-          : "Não foi possível fechar o pedido. Confira nome, e-mail e CEP.";
+      err.textContent = checkoutError(data);
       return;
     }
     writeCart([]);

@@ -2,10 +2,12 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
+const { buildOrder, validateContact } = require("./lib/orders");
 
 const PORT = Number(process.env.PORT || 8080);
 const VERSION = process.env.APP_VERSION || "1.0.0";
 const INJECT_ERRORS = process.env.INJECT_ERRORS === "1";
+const INJECT_LATENCY_MS = Number(process.env.INJECT_LATENCY_MS || 0);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const PRODUCTS = JSON.parse(fs.readFileSync(path.join(__dirname, "products.json"), "utf8"));
 
@@ -169,7 +171,7 @@ async function handleApi(req, res, route) {
     const product = findProduct(skuMatch[1]);
     if (!product) {
       track(404);
-      sendJson(res, 404, { error: "sku_not_found" });
+      sendJson(res, 404, { ok: false, error: "sku_not_found" });
       return true;
     }
     track(200);
@@ -178,14 +180,15 @@ async function handleApi(req, res, route) {
   }
 
   if (route === "/api/contact" && req.method === "POST") {
-    const body = await readBody(req);
-    if (!body.name || !body.message) {
-      track(400);
-      sendJson(res, 400, { ok: false, error: "name_and_message_required" });
+    const checked = validateContact(await readBody(req));
+    if (!checked.ok) {
+      const { status, ...error } = checked;
+      track(status);
+      sendJson(res, status, error);
       return true;
     }
     track(200);
-    sendJson(res, 200, { ok: true, message: `Recebemos a mensagem de ${body.name}.` });
+    sendJson(res, 200, { ok: true, message: `Recebemos a mensagem de ${checked.name}.` });
     return true;
   }
 
@@ -195,41 +198,18 @@ async function handleApi(req, res, route) {
       sendJson(res, 500, { ok: false, error: "checkout_unavailable" });
       return true;
     }
-    const body = await readBody(req);
-    const items = Array.isArray(body.items) ? body.items : [];
-    if (!items.length) {
-      track(400);
-      sendJson(res, 400, { ok: false, error: "empty_cart" });
+    const result = buildOrder(await readBody(req), PRODUCTS);
+    if (!result.ok) {
+      const { status, ...error } = result;
+      track(status);
+      sendJson(res, status, error);
       return true;
-    }
-    if (!body.customer || !body.customer.name || !body.customer.email || !body.customer.cep) {
-      track(400);
-      sendJson(res, 400, { ok: false, error: "customer_required" });
-      return true;
-    }
-    const lines = [];
-    let total = 0;
-    for (const item of items) {
-      const product = findProduct(item.sku);
-      if (!product) {
-        track(400);
-        sendJson(res, 400, { ok: false, error: "unknown_sku", sku: item.sku });
-        return true;
-      }
-      const qty = Number(item.qty) || 0;
-      if (qty < 1) {
-        track(400);
-        sendJson(res, 400, { ok: false, error: "invalid_qty" });
-        return true;
-      }
-      total += product.price * qty;
-      lines.push({ sku: product.sku, name: product.name, qty, price: product.price });
     }
     const order = {
       id: `NB-${String(orders.length + 1).padStart(4, "0")}`,
-      customer: body.customer,
-      items: lines,
-      total,
+      customer: result.customer,
+      items: result.items,
+      total: result.total,
       version: VERSION,
     };
     orders.push(order);
@@ -246,6 +226,9 @@ const server = http.createServer(async (req, res) => {
   const route = url.pathname;
 
   try {
+    if (INJECT_LATENCY_MS > 0 && route !== "/health" && route !== "/metrics") {
+      await new Promise((resolve) => setTimeout(resolve, INJECT_LATENCY_MS));
+    }
     if (route === "/health") {
       sendJson(res, 200, { status: "ok", version: VERSION });
       return;
