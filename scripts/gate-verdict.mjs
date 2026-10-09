@@ -1,8 +1,8 @@
 // Junta o resultado de cada etapa do deploy num veredito e numa classe de falha.
 // Em drill o gate nunca promove: o job passa quando a falha cai na classe esperada.
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const STAGES = [
   ["budget", "budget"],
@@ -71,4 +71,4 @@ function main() {
   process.exit(result.exitCode);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();

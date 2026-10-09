@@ -1,8 +1,8 @@
 // Compara canary e stable com as mesmas sondas, intercaladas no tempo.
 // Roda no Job do AnalysisTemplate (node:22-alpine, via ConfigMap) e no runner do Actions.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const DEFAULT_LIMITS = {
   maxErrorRate: 0.05,
@@ -150,7 +150,8 @@ async function main() {
   process.exitCode = result.verdict === "pass" ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// ConfigMap monta o arquivo como symlink; sem realpath o main nunca roda e o Job sai 0 sem medir.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

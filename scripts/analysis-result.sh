@@ -39,5 +39,13 @@ done
 jq -s --arg run "$RUN" --arg status "$STATUS" '{run: $run, status: $status, samples: .}' "$LOGS" > "$OUT"
 
 PHASE=$(kubectl get rollout "$NAME" -n "$NS" -o jsonpath='{.status.phase}')
-echo "rollout phase=$PHASE"
+SAMPLES=$(jq '.samples | length' "$OUT")
+JOB_COUNT=$(echo "$JOBS" | grep -c . || true)
+echo "rollout phase=$PHASE medicoes=$SAMPLES jobs=$JOB_COUNT"
+
+# Analysis verde sem medicao nao e evidencia de nada.
+if [ "$STATUS" = "Successful" ] && [ "$SAMPLES" -lt "$JOB_COUNT" ]; then
+  echo "analysis aprovou sem GATE_RESULT em todos os jobs: tratando como falha"
+  exit 1
+fi
 [ "$STATUS" = "Successful" ] && [ "$PHASE" != "Degraded" ]
